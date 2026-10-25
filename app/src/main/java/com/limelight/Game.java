@@ -4049,7 +4049,7 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
 
         String savedMouseModeIndexStr = ProfilesManager.getInstance()
                 .getOverlayingSharedPreferences(this)
-                .getString("mouse_mode_list", "0");
+                .getString("mouse_mode_list", "2");
 
         int savedMouseModeIndex;
         try {

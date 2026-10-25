@@ -12,22 +12,24 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           submodules: recursive
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
 
-      - uses: android-actions/setup-android@v3
-
+      # GitHub's Ubuntu runners ship with the Android SDK preinstalled.
       - name: Install NDK
-        run: sdkmanager --install "ndk;27.0.12077973" > /dev/null
+        run: |
+          SDKM="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKM" --licenses > /dev/null || true
+          "$SDKM" --install "ndk;27.0.12077973" "platforms;android-36" "build-tools;36.0.0" > /dev/null
 
       - uses: gradle/actions/setup-gradle@v4
 
@@ -45,7 +47,13 @@ jobs:
       - name: Build release APKs
         env:
           HERMES_KEYSTORE_PASSWORD: ${{ secrets.HERMES_KEYSTORE_PASSWORD }}
-        run: ./gradlew --no-daemon assembleNonRoot_gameRelease
+        run: |
+          set -o pipefail
+          ./gradlew --no-daemon assembleNonRoot_gameRelease 2>&1 | tee build.log
+      - name: Surface build errors as annotations
+        if: failure()
+        run: |
+          grep -E "error:|e: |FAILED|What went wrong|Exception|> " build.log | head -60 | while IFS= read -r l; do echo "::error::$l"; done || true
 
       - name: Collect APKs
         run: |

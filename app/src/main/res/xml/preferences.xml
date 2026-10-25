@@ -366,7 +366,7 @@
         app:initialExpandedChildrenCount="1"
         app:iconSpaceReserved="false">
         <ListPreference
-            android:defaultValue="0"
+            android:defaultValue="2"
             android:entries="@array/mouse_mode_names"
             android:entryValues="@array/mouse_mode_values"
             android:key="mouse_mode_list"

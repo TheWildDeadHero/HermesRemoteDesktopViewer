@@ -895,7 +895,7 @@ private static int getFramePacingValue(Context context) {
         config.renderMode = renderModeInt;
 
         // Read mouse mode and set touch settings accordingly
-        String mouseMode = prefs.getString("mouse_mode_list", "0");
+        String mouseMode = prefs.getString("mouse_mode_list", "2");
         int mouseModeInt = Integer.parseInt(mouseMode);
         switch (mouseModeInt) {
             case 0: // Multi-touch
