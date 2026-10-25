@@ -11,8 +11,8 @@ android {
         minSdk 21
         targetSdk 34
 
-        versionName "20.2.6"
-        versionCode = 57
+        versionName "1.0.0-hermes"
+        versionCode = 1
 
         // Generate native debug symbols to allow Google Play to symbolicate our native crashes
         ndk.debugSymbolLevel = 'FULL'
@@ -40,7 +40,7 @@ android {
                     "obtainium_app_url",
                     "data:text/html;base64,PGgxPlJvb3QgYnVpbGQgaXMgbm90IGF2YWlsYWJsZTwvaDE+"
 
-            applicationId "com.limelight.root"
+            applicationId "io.github.thewilddeadhero.hermes.root"
             dimension "root"
             buildConfigField "boolean", "ROOT_BUILD", "true"
         }
@@ -54,9 +54,9 @@ android {
 
             resValue "string",
                     "obtainium_app_url",
-                    "https://apps.obtainium.imranr.dev/redirect?r=obtainium://app/%7B%22id%22%3A%22com.limelight.noir%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2FClassicOldSong%2Fmoonlight-android%22%2C%22author%22%3A%22ClassicOldSong%22%2C%22name%22%3A%22Artemis%22%2C%22additionalSettings%22%3A%22%7B%5C%22apkFilterRegEx%5C%22%3A%5C%22nonRoot%5C%22%2C%5C%22matchGroutToUse%5C%22%3A%5C%22%241%5C%22%2C%5C%22versionExtractionRegEx%5C%22%3A%5C%22v(.%2B)%5C%22%7D%22%7D"
+                    "https://github.com/TheWildDeadHero/HermesRemoteDesktopViewer/releases"
 
-            applicationId "com.limelight"
+            applicationId "io.github.thewilddeadhero.hermes"
             dimension "root"
             buildConfigField "boolean", "ROOT_BUILD", "false"
         }
@@ -93,12 +93,26 @@ android {
         }
     }
 
+    signingConfigs {
+        // Stable release signing so new builds install as updates over old ones.
+        // CI provides these from repository secrets; see README "Signing".
+        hermes {
+            def ksPath = System.getenv("HERMES_KEYSTORE_FILE")
+            if (ksPath) {
+                storeFile file(ksPath)
+                storePassword System.getenv("HERMES_KEYSTORE_PASSWORD")
+                keyAlias System.getenv("HERMES_KEY_ALIAS") ?: "hermes"
+                keyPassword System.getenv("HERMES_KEYSTORE_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         debug {
-            applicationIdSuffix ".noirdebug"
-            resValue "string", "app_label", "Diana"
-            resValue "string", "app_label_root", "Diana (Root)"
-            resValue "string", "app_label_game", "Diana (Game)"
+            applicationIdSuffix ".debug"
+            resValue "string", "app_label", "Hermes (Debug)"
+            resValue "string", "app_label_root", "Hermes (Debug, Root)"
+            resValue "string", "app_label_game", "Hermes (Debug)"
 
             minifyEnabled true
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
@@ -133,11 +147,20 @@ android {
             // cool projects the best of luck with their efforts. All I ask
             // is to please change the applicationId before you publish.
             //
-            // TL;DR: Leave the following line alone!
-            applicationIdSuffix ".noir"
-            resValue "string", "app_label", "Artemis"
-            resValue "string", "app_label_root", "Artemis (Root)"
-            resValue "string", "app_label_game", "Artemis (Game)"
+            // (Upstream note kept for attribution.)
+            // Hermes uses its own applicationId (see productFlavors), so it
+            // installs side-by-side with Moonlight and Artemis.
+            resValue "string", "app_label", "Hermes Remote Desktop"
+            resValue "string", "app_label_root", "Hermes Remote Desktop (Root)"
+            resValue "string", "app_label_game", "Hermes Remote Desktop"
+
+            if (System.getenv("HERMES_KEYSTORE_FILE")) {
+                signingConfig signingConfigs.hermes
+            } else {
+                // No release key configured: fall back to the debug key so the
+                // APK is still installable (updates may need a reinstall).
+                signingConfig signingConfigs.debug
+            }
 
             minifyEnabled true
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
