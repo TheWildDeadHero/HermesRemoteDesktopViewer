@@ -84,7 +84,13 @@ public class ComputerListActivity extends AppCompatActivity implements ComputerL
     private View emptyState;
     private ShortcutHelper shortcutHelper;
 
-    private String pendingConnectUuid;
+    private static final long WAKE_CONNECT_TIMEOUT_MS = 3 * 60 * 1000;
+
+    private volatile String pendingConnectUuid;
+    // After Wake-on-LAN: connect when the computer comes online, ignoring OFFLINE reports
+    // while it boots, until the deadline passes.
+    private volatile String wakeConnectUuid;
+    private volatile long wakeConnectDeadline;
     private ComputerDetails.AddressTuple pendingPairingAddress;
     private String pendingPairingPin, pendingPairingPassphrase;
     private boolean connectInProgress;
@@ -162,6 +168,9 @@ public class ComputerListActivity extends AppCompatActivity implements ComputerL
         // Deep-link pairing handed over from AddComputerManually (art:// URIs with a PIN)
         String hostname = intent.getStringExtra("hostname");
         int port = intent.getIntExtra("port", NvHTTP.DEFAULT_HTTP_PORT);
+        if (port <= 0) {
+            port = NvHTTP.DEFAULT_HTTP_PORT;
+        }
         String pin = intent.getStringExtra("pin");
         String passphrase = intent.getStringExtra("passphrase");
         if (hostname != null && pin != null && passphrase != null) {
@@ -182,6 +191,7 @@ public class ComputerListActivity extends AppCompatActivity implements ComputerL
         PreferenceManager.setDefaultValues(this, R.xml.preferences, false);
 
         setContentView(R.layout.activity_computer_list);
+        UiHelper.notifyNewRootView(this);
 
         MaterialToolbar toolbar = findViewById(R.id.toolbar);
         toolbar.setOnMenuItemClickListener(item -> {
@@ -267,7 +277,7 @@ public class ComputerListActivity extends AppCompatActivity implements ComputerL
     }
 
     private void onComputerUpdated(ComputerDetails details) {
-        if (adapter == null || isFinishing()) {
+        if (adapter == null || isGone()) {
             return;
         }
         adapter.upsert(details);
@@ -281,6 +291,16 @@ public class ComputerListActivity extends AppCompatActivity implements ComputerL
             pendingPairingPin = null;
             pendingPairingPassphrase = null;
             doPair(details, pin, passphrase);
+            return;
+        }
+
+        if (wakeConnectUuid != null && wakeConnectUuid.equals(details.uuid)) {
+            if (online && details.activeAddress != null) {
+                wakeConnectUuid = null;
+                onComputerClicked(details);
+            } else if (System.currentTimeMillis() > wakeConnectDeadline) {
+                wakeConnectUuid = null;
+            }
             return;
         }
 
@@ -319,6 +339,25 @@ public class ComputerListActivity extends AppCompatActivity implements ComputerL
         if (managerBinder != null) {
             unbindService(serviceConnection);
         }
+    }
+
+    /** True once this instance can no longer show UI (finishing or destroyed by recreation). */
+    private boolean isGone() {
+        return isFinishing() || (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1 && isDestroyed());
+    }
+
+    /**
+     * The adapter can hold a stale snapshot (e.g. from discovery) without the pinned server
+     * certificate; always act on the service's live copy when there is one.
+     */
+    private ComputerDetails live(ComputerDetails computer) {
+        if (managerBinder != null && computer != null && computer.uuid != null) {
+            ComputerDetails l = managerBinder.getComputer(computer.uuid);
+            if (l != null) {
+                return l;
+            }
+        }
+        return computer;
     }
 
     private boolean ensureManager() {
@@ -443,10 +482,11 @@ public class ComputerListActivity extends AppCompatActivity implements ComputerL
      *
      * @param forceChoose show the picker even if a desktop entry can be found automatically
      */
-    private void connectToDesktop(final ComputerDetails computer, final boolean forceChoose) {
+    private void connectToDesktop(ComputerDetails target, final boolean forceChoose) {
         if (!ensureManager() || connectInProgress) {
             return;
         }
+        final ComputerDetails computer = live(target);
 
         // Reconnect to a session that's already running instead of starting a new one,
         // just like CRD reattaches to the existing desktop.
@@ -467,7 +507,7 @@ public class ComputerListActivity extends AppCompatActivity implements ComputerL
             if (!forceChoose && computer.rawAppList != null && !computer.rawAppList.isEmpty()) {
                 try {
                     apps = NvHTTP.getAppListByReader(new StringReader(computer.rawAppList));
-                } catch (XmlPullParserException | IOException e) {
+                } catch (XmlPullParserException | IOException | RuntimeException e) {
                     apps = null;
                 }
             }
@@ -484,6 +524,9 @@ public class ComputerListActivity extends AppCompatActivity implements ComputerL
                     error = getString(R.string.error_404);
                 } catch (XmlPullParserException | IOException e) {
                     error = e.getMessage();
+                } catch (RuntimeException e) {
+                    // e.g. OkHttp rejecting a host name it can't canonicalize
+                    error = e.toString();
                 }
             }
 
@@ -492,7 +535,8 @@ public class ComputerListActivity extends AppCompatActivity implements ComputerL
             runOnUiThread(() -> {
                 spinner.dismiss();
                 connectInProgress = false;
-                if (isFinishing()) {
+                if (isGone() || !inForeground) {
+                    // User left while we were loading; don't pop a stream over whatever they're doing
                     return;
                 }
 
@@ -540,17 +584,15 @@ public class ComputerListActivity extends AppCompatActivity implements ComputerL
     }
 
     private void launch(ComputerDetails computer, NvApp app) {
-        if (!ensureManager()) {
+        if (!ensureManager() || isGone()) {
             return;
         }
         // Use the binder's live copy so we have the pinned server certificate after pairing
-        ComputerDetails live = managerBinder.getComputer(computer.uuid);
-        if (live != null) {
-            computer = live;
-        }
+        computer = live(computer);
 
-        boolean vDisplay = computer.vDisplaySupported && computer.vDisplayDriverReady;
-        if (!vDisplay && computer.runningGameId == 0) {
+        boolean wantVDisplay = PreferenceConfiguration.readPreferences(this).useVirtualDisplay;
+        boolean vDisplay = wantVDisplay && computer.vDisplaySupported && computer.vDisplayDriverReady;
+        if (wantVDisplay && !vDisplay && computer.runningGameId == 0) {
             Toast.makeText(this, getString(R.string.hermes_no_vdisplay, computer.name), Toast.LENGTH_LONG).show();
         }
 
@@ -571,7 +613,7 @@ public class ComputerListActivity extends AppCompatActivity implements ComputerL
                 .setMessage(R.string.hermes_end_session_msg)
                 .setPositiveButton(R.string.hermes_end_session, (d, w) -> {
                     if (ensureManager()) {
-                        ServerHelper.doQuit(this, computer, new NvApp("Desktop", null, 0, false), managerBinder,
+                        ServerHelper.doQuit(this, live(computer), new NvApp("Desktop", null, 0, false), managerBinder,
                                 () -> {
                                     if (managerBinder != null) {
                                         managerBinder.invalidateStateForComputer(computer.uuid);
@@ -612,7 +654,8 @@ public class ComputerListActivity extends AppCompatActivity implements ComputerL
                 WakeOnLanSender.sendWolPacket(computer);
                 message = getString(R.string.wol_waking_msg);
                 // Watch for it coming online and connect automatically
-                pendingConnectUuid = computer.uuid;
+                wakeConnectDeadline = System.currentTimeMillis() + WAKE_CONNECT_TIMEOUT_MS;
+                wakeConnectUuid = computer.uuid;
                 if (managerBinder != null) {
                     managerBinder.invalidateStateForComputer(computer.uuid);
                 }
@@ -706,7 +749,7 @@ public class ComputerListActivity extends AppCompatActivity implements ComputerL
             final int test = portTest;
             runOnUiThread(() -> {
                 spinner.dismiss();
-                if (isFinishing()) {
+                if (isGone()) {
                     return;
                 }
                 if (ok) {
@@ -792,7 +835,8 @@ public class ComputerListActivity extends AppCompatActivity implements ComputerL
      * Apollo, or (OTP) the user supplies a PIN + passphrase generated by Apollo.
      * On success we go straight into the desktop.
      */
-    private void doPair(final ComputerDetails computer, final String otp, final String passphrase) {
+    private void doPair(ComputerDetails target, final String otp, final String passphrase) {
+        final ComputerDetails computer = live(target);
         if (computer.state == ComputerDetails.State.OFFLINE || computer.activeAddress == null) {
             Toast.makeText(this, R.string.pair_pc_offline, Toast.LENGTH_SHORT).show();
             return;
@@ -856,6 +900,9 @@ public class ComputerListActivity extends AppCompatActivity implements ComputerL
             } catch (XmlPullParserException | IOException e) {
                 LimeLog.warning("Pairing failed: " + e);
                 message = e.getMessage();
+            } catch (RuntimeException e) {
+                LimeLog.warning("Pairing failed: " + e);
+                message = e.toString();
             }
 
             Dialog.closeDialogs();
@@ -863,18 +910,22 @@ public class ComputerListActivity extends AppCompatActivity implements ComputerL
             final String toast = message;
             final boolean ok = success;
             runOnUiThread(() -> {
+                if (isGone()) {
+                    return;
+                }
                 if (toast != null) {
                     Toast.makeText(this, toast, Toast.LENGTH_LONG).show();
                 }
                 startComputerUpdates();
-                if (ok && !isFinishing()) {
+                if (ok && inForeground) {
                     connectToDesktop(computer, false);
                 }
             });
         }).start();
     }
 
-    private void doUnpair(final ComputerDetails computer) {
+    private void doUnpair(ComputerDetails target) {
+        final ComputerDetails computer = live(target);
         if (computer.state == ComputerDetails.State.OFFLINE || computer.activeAddress == null) {
             Toast.makeText(this, R.string.error_pc_offline, Toast.LENGTH_SHORT).show();
             return;
@@ -904,9 +955,15 @@ public class ComputerListActivity extends AppCompatActivity implements ComputerL
                 message = getString(R.string.error_404);
             } catch (XmlPullParserException | IOException e) {
                 message = e.getMessage();
+            } catch (RuntimeException e) {
+                message = e.toString();
             }
             final String toast = message;
-            runOnUiThread(() -> Toast.makeText(this, toast, Toast.LENGTH_LONG).show());
+            runOnUiThread(() -> {
+                if (!isGone()) {
+                    Toast.makeText(this, toast, Toast.LENGTH_LONG).show();
+                }
+            });
         }).start();
     }
 

@@ -88,9 +88,9 @@ public class SessionPanel implements Game.GameMenuCallbacks {
         dialog.setCanceledOnTouchOutside(true);
 
         bindHeader(root);
+        bindDisplay(root);
         bindInputMode(root);
         bindKeys(root);
-        bindDisplay(root);
         bindActions(root, device);
 
         showImmersive(dialog);
@@ -133,6 +133,8 @@ public class SessionPanel implements Game.GameMenuCallbacks {
             if (!isChecked) {
                 return;
             }
+            // Changing mouse mode always leaves pan/zoom mode in Game; keep the switch honest
+            MaterialSwitch zoom = root.findViewById(R.id.switchZoom);
             if (checkedId == R.id.inputTouch && game.getCurrentMouseMode() != MODE_TOUCH) {
                 game.setMouseModeAndRemember(MODE_TOUCH);
                 help.setVisibility(View.VISIBLE);
@@ -141,6 +143,9 @@ public class SessionPanel implements Game.GameMenuCallbacks {
                 game.setMouseModeAndRemember(MODE_TRACKPAD);
                 help.setVisibility(View.VISIBLE);
                 help.setText(R.string.hermes_input_trackpad_help);
+            }
+            if (zoom != null) {
+                zoom.setChecked(game.isZoomModeEnabled());
             }
         });
     }

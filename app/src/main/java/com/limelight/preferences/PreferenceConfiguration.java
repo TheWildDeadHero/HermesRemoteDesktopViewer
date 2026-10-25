@@ -143,7 +143,7 @@ public class PreferenceConfiguration {
     static final String DEFAULT_FPS = "60";
     private static final boolean DEFAULT_ENABLE_ULTRA_LOW_LATENCY = false;
     private static final boolean DEFAULT_ENFORCE_DISPLAY_MODE = false;
-    private static final boolean DEFAULT_USE_VIRTUAL_DISPLAY = false;
+    private static final boolean DEFAULT_USE_VIRTUAL_DISPLAY = true; // Hermes default
     private static final String DEFAULT_VIDEO_SCALE_MODE = "fit";
     private static final boolean DEFAULT_AUTO_INVERT_VIDEO_RESOLUTION = true;
     private static final int DEFAULT_RESOLUTION_SCALE_FACTOR = 100;
@@ -169,7 +169,7 @@ public class PreferenceConfiguration {
     private static final boolean DEFAULT_ENABLE_PERF_LOGGING = false;
     private static final boolean DEFAULT_BIND_ALL_USB = false;
     private static final boolean DEFAULT_MOUSE_EMULATION = true;
-    private static final boolean DEFAULT_REMEMBER_MOUSE_MODE = false;
+    private static final boolean DEFAULT_REMEMBER_MOUSE_MODE = true; // Hermes default
     private static final String DEFAULT_ANALOG_STICK_FOR_SCROLLING = "right";
     private static final boolean DEFAULT_MOUSE_NAV_BUTTONS = false;
     private static final boolean DEFAULT_UNLOCK_FPS = false;

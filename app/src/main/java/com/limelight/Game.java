@@ -4173,13 +4173,15 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
         return currentMouseMode;
     }
 
-    /** Applies a mouse mode and remembers it for the next session (Hermes side panel). */
+    /** Applies a mouse mode and, if "remember mouse mode" is on, keeps it for next time. */
     public void setMouseModeAndRemember(int mode) {
         applyMouseMode(mode);
-        ProfilesManager.getInstance().getOverlayingSharedPreferences(this)
-                .edit()
-                .putString("mouse_mode_list", String.valueOf(mode))
-                .apply();
+        if (prefConfig.rememberMouseMode) {
+            ProfilesManager.getInstance().getOverlayingSharedPreferences(this)
+                    .edit()
+                    .putString("mouse_mode_list", String.valueOf(mode))
+                    .apply();
+        }
     }
 
     public String getPcName() {
