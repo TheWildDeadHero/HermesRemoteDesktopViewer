@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Computer list: Material 3 with Material You colors where available. -->
+    <style name="Base.Theme.Hermes" parent="Theme.Material3.DynamicColors.DayNight.NoActionBar">
+        <item name="android:statusBarColor">?attr/colorSurface</item>
+        <item name="android:navigationBarColor">?attr/colorSurface</item>
+    </style>
+
+    <style name="Theme.Hermes" parent="Base.Theme.Hermes">
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+
+    <!-- In-session side panel. Always dark so it reads well over any desktop. -->
+    <style name="Theme.Hermes.SessionPanel" parent="Theme.Material3.DynamicColors.Dark">
+        <item name="android:windowIsFloating">false</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:backgroundDimEnabled">true</item>
+        <item name="android:backgroundDimAmount">0.35</item>
+        <item name="android:windowAnimationStyle">@style/Animation.Hermes.SessionPanel</item>
+    </style>
+
+    <style name="Animation.Hermes.SessionPanel" parent="@android:style/Animation">
+        <item name="android:windowEnterAnimation">@anim/hermes_panel_in</item>
+        <item name="android:windowExitAnimation">@anim/hermes_panel_out</item>
+    </style>
+
+    <style name="Hermes.SectionHeader" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:paddingStart">20dp</item>
+        <item name="android:paddingEnd">20dp</item>
+        <item name="android:paddingTop">16dp</item>
+        <item name="android:paddingBottom">8dp</item>
+        <item name="android:textAppearance">?attr/textAppearanceLabelLarge</item>
+        <item name="android:textColor">?attr/colorPrimary</item>
+    </style>
+
+    <!-- Full-width row in the session panel: icon + label. -->
+    <style name="Hermes.PanelRow" parent="Widget.Material3.Button.TextButton.Icon">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">52dp</item>
+        <item name="android:gravity">start|center_vertical</item>
+        <item name="android:paddingStart">20dp</item>
+        <item name="android:paddingEnd">20dp</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="android:textAppearance">?attr/textAppearanceBodyLarge</item>
+        <item name="android:textColor">?attr/colorOnSurface</item>
+        <item name="iconTint">?attr/colorOnSurfaceVariant</item>
+        <item name="iconPadding">20dp</item>
+        <item name="shapeAppearance">@style/ShapeAppearance.Material3.Corner.None</item>
+    </style>
+</resources>

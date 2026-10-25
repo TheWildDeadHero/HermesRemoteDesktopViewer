@@ -205,7 +205,7 @@ public class AddComputerManually extends AppCompatActivity {
                     String pin = uri.getQueryParameter("pin");
                     String passphrase = uri.getQueryParameter("passphrase");
                     if (pin != null && passphrase != null) {
-                        Intent intent = new Intent(AddComputerManually.this, PcView.class);
+                        Intent intent = new Intent(AddComputerManually.this, com.limelight.hermes.ComputerListActivity.class);
                         intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK | Intent.FLAG_ACTIVITY_NEW_TASK);
                         intent.putExtra("hostname", uri.getHost());
                         intent.putExtra("port", uri.getPort());

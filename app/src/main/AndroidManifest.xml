@@ -87,15 +87,17 @@
         <!-- Samsung DeX support requires explicit placement of android:resizeableActivity="true"
              in each activity even though it is implied by targeting API 24+ -->
 
+        <!-- Hermes home screen: CRD-style list of computers (replaces PcView as launcher) -->
         <activity
-            android:name=".PcView"
+            android:name=".hermes.ComputerListActivity"
             android:exported="true"
+            android:launchMode="singleTask"
+            android:theme="@style/Theme.Hermes"
             android:resizeableActivity="true"
             android:enableOnBackInvokedCallback="true"
-            android:configChanges="mcc|mnc|touchscreen|keyboard|keyboardHidden|navigation|screenLayout|fontScale|uiMode|orientation|screenSize|smallestScreenSize|layoutDirection">
+            android:configChanges="mcc|mnc|touchscreen|keyboard|keyboardHidden|navigation|screenLayout|fontScale|orientation|screenSize|smallestScreenSize|layoutDirection">
 
             <meta-data android:name="WindowManagerPreference:FreeformWindowSize" android:value="system-default" />
-            <meta-data android:name="WindowManagerPreference:FreeformWindowOrientation" android:value="landscape" />
 
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -106,6 +108,13 @@
                 <category android:name="tv.ouya.intent.category.APP" />
             </intent-filter>
         </activity>
+        <!-- Artemis' original computer grid; kept for compatibility, not launched by Hermes -->
+        <activity
+            android:name=".PcView"
+            android:exported="false"
+            android:resizeableActivity="true"
+            android:enableOnBackInvokedCallback="true"
+            android:configChanges="mcc|mnc|touchscreen|keyboard|keyboardHidden|navigation|screenLayout|fontScale|uiMode|orientation|screenSize|smallestScreenSize|layoutDirection" />
         <!-- Small hack to support launcher shortcuts without relaunching over and over again when the back button is pressed -->
         <activity
             android:name=".ShortcutTrampoline"

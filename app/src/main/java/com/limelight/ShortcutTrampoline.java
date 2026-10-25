@@ -181,23 +181,13 @@ public class ShortcutTrampoline extends AppCompatActivity {
                                                 // Close this activity
                                                 finish();
 
-                                                // Add the PC view at the back (and clear the task)
-                                                Intent i;
-                                                i = new Intent(ShortcutTrampoline.this, PcView.class);
+                                                // Hermes: open the computer list and connect straight to
+                                                // this computer's desktop (resuming a running session).
+                                                Intent i = new Intent(ShortcutTrampoline.this, com.limelight.hermes.ComputerListActivity.class);
                                                 i.setAction(Intent.ACTION_MAIN);
                                                 i.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK | Intent.FLAG_ACTIVITY_NEW_TASK);
+                                                i.putExtra(com.limelight.hermes.ComputerListActivity.EXTRA_CONNECT_UUID, details.uuid);
                                                 intentStack.add(i);
-
-                                                // Take this intent's data and create an intent to start the app view
-                                                i = new Intent(getIntent());
-                                                i.setClass(ShortcutTrampoline.this, AppView.class);
-                                                intentStack.add(i);
-
-                                                // If a game is running, we'll make the stream the top level activity
-                                                if (details.runningGameId != 0) {
-                                                    intentStack.add(ServerHelper.createStartIntent(ShortcutTrampoline.this,
-                                                            new NvApp(null, null, details.runningGameId, false), details, managerBinder, prefConfig.useVirtualDisplay));
-                                                }
 
                                                 // Now start the activities
                                                 startActivities(intentStack.toArray(new Intent[]{}));
