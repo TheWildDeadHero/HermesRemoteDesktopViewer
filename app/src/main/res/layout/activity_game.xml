@@ -91,14 +91,16 @@
     <!-- Floating Menu Button -->
     <ImageButton
         android:id="@+id/floatingMenuButton"
-        android:layout_width="36dp"
-        android:layout_height="36dp"
-        android:layout_gravity="top|start"
+        android:layout_width="44dp"
+        android:layout_height="44dp"
+        android:layout_gravity="top|end"
         android:layout_marginTop="24dp"
-        android:background="@drawable/floating_menu_button"
+        android:layout_marginEnd="12dp"
+        android:background="@drawable/hermes_session_handle"
         android:contentDescription="@string/menu_button"
-        android:src="@drawable/ic_menu"
-        android:padding="6dp"
+        android:src="@drawable/hermes_ic_menu"
+        android:scaleType="center"
+        android:alpha="0.85"
         android:visibility="gone"
         android:elevation="9999dp" />
 

@@ -150,9 +150,9 @@ android {
             // (Upstream note kept for attribution.)
             // Hermes uses its own applicationId (see productFlavors), so it
             // installs side-by-side with Moonlight and Artemis.
-            resValue "string", "app_label", "Hermes Remote Desktop"
-            resValue "string", "app_label_root", "Hermes Remote Desktop (Root)"
-            resValue "string", "app_label_game", "Hermes Remote Desktop"
+            resValue "string", "app_label", "Hermes"
+            resValue "string", "app_label_root", "Hermes (Root)"
+            resValue "string", "app_label_game", "Hermes"
 
             if (System.getenv("HERMES_KEYSTORE_FILE")) {
                 signingConfig signingConfigs.hermes

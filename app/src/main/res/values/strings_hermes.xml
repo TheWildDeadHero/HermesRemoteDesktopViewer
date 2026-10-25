@@ -2,7 +2,7 @@
 <!-- Strings for the Hermes remote-desktop UI (computer list + in-session panel). -->
 <resources>
     <!-- Computer list -->
-    <string name="hermes_title">Remote Desktop</string>
+    <string name="hermes_title">Hermes</string>
     <string name="hermes_section_computers">Remote computers</string>
     <string name="hermes_add_computer">Add computer</string>
     <string name="hermes_empty_title">Looking for computers…</string>

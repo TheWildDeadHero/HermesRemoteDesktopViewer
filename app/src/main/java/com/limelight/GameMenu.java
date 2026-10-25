@@ -152,7 +152,7 @@ public class GameMenu implements Game.GameMenuCallbacks {
         }
     }
 
-    private void showSpecialKeysMenu() {
+    public void showSpecialKeysMenu() {
         List<MenuOption> options = new ArrayList<>();
 
         if(!PreferenceConfiguration.readPreferences(game).disableDefaultExtraKeys){
@@ -242,7 +242,7 @@ public class GameMenu implements Game.GameMenuCallbacks {
         showMenuDialog(getString(R.string.game_menu_send_keys), options.toArray(new MenuOption[options.size()]));
     }
 
-    private void showAdvancedMenu(GameInputDevice device) {
+    public void showAdvancedMenu(GameInputDevice device) {
         List<MenuOption> options = new ArrayList<>();
         if (game.allowChangeMouseMode) {
             options.add(new MenuOption(getString(R.string.game_menu_select_mouse_mode), true, () -> game.selectMouseMode(dialogScreenContext)));
@@ -271,7 +271,7 @@ public class GameMenu implements Game.GameMenuCallbacks {
         showMenuDialog(getString(R.string.game_menu_advanced), options.toArray(new MenuOption[options.size()]));
     }
 
-    private void showServerCmd(ArrayList<String> serverCmds) {
+    public void showServerCmd(ArrayList<String> serverCmds) {
         List<MenuOption> options = new ArrayList<>();
 
         AtomicInteger index = new AtomicInteger(0);

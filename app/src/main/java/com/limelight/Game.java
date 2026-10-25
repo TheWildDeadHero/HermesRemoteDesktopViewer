@@ -878,7 +878,8 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
             }
         });
 
-        gameMenuCallbacks = new GameMenu(this);
+        // Hermes: Chrome Remote Desktop-style side panel instead of the list dialog
+        gameMenuCallbacks = new com.limelight.hermes.SessionPanel(this);
 
         floatingMenuButton = findViewById(R.id.floatingMenuButton);
         updateFloatingButtonVisibility(prefConfig.enableBackMenu && prefConfig.enableFloatingButton);
@@ -4165,7 +4166,50 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
         }
     }
 
+    private int currentMouseMode = -1;
+
+    /** Mouse mode index into R.array.mouse_mode_names (1 = touch, 2 = trackpad), or -1 if unset. */
+    public int getCurrentMouseMode() {
+        return currentMouseMode;
+    }
+
+    /** Applies a mouse mode and remembers it for the next session (Hermes side panel). */
+    public void setMouseModeAndRemember(int mode) {
+        applyMouseMode(mode);
+        ProfilesManager.getInstance().getOverlayingSharedPreferences(this)
+                .edit()
+                .putString("mouse_mode_list", String.valueOf(mode))
+                .apply();
+    }
+
+    public String getPcName() {
+        return pcName;
+    }
+
+    public boolean isPerfOverlayEnabled() {
+        return prefConfig.enablePerfOverlay;
+    }
+
+    public PreferenceConfiguration.ScaleMode getVideoScaleMode() {
+        return prefConfig.videoScaleMode;
+    }
+
+    /** Switches between Fit / Fill / Stretch while streaming. */
+    public void setVideoScaleMode(PreferenceConfiguration.ScaleMode mode) {
+        prefConfig.videoScaleMode = mode;
+        if (streamContainer == null) {
+            return;
+        }
+        if (mode == PreferenceConfiguration.ScaleMode.STRETCH || displayWidth <= 0 || displayHeight <= 0) {
+            streamContainer.setDesiredAspectRatio(0);
+        } else {
+            streamContainer.setFillDisplay(mode == PreferenceConfiguration.ScaleMode.FILL);
+            streamContainer.setDesiredAspectRatio((double) displayWidth / (double) displayHeight);
+        }
+    }
+
     private void applyMouseMode(int mode) {
+        currentMouseMode = mode;
         switch (mode) {
             case 0: // Multi-touch
                 prefConfig.enableMultiTouchScreen = true;
