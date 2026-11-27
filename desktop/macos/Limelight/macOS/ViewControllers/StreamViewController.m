@@ -55,6 +55,8 @@
 @property (nonatomic) int streamHeight;
 @property (nonatomic) int streamFps;
 @property (nonatomic, copy) NSString *defaultSubtitle;
+@property (nonatomic) HermesPointerMode sessionPointerMode;
+@property (nonatomic, strong) NSScreen *targetScreen;
 
 @end
 
@@ -152,8 +154,7 @@
     [self.view.window makeFirstResponder:self];
     
     self.view.window.contentAspectRatio = NSMakeSize(self.streamWidth, self.streamHeight);
-    self.view.window.frameAutosaveName = @"Stream Window";
-    [self.view.window moonlight_centerWindowOnFirstRunWithSize:CGSizeMake(1008, 595)];
+    [self placeWindowOnTargetScreen];
     
     self.view.window.appearance = [NSAppearance appearanceNamed:NSAppearanceNameVibrantDark];
 
@@ -267,7 +268,28 @@
 #pragma mark - Hermes desktop pointer
 
 - (BOOL)usesDesktopPointer {
-    return [HermesSettings pointerMode] == HermesPointerModeDesktop;
+    return self.sessionPointerMode == HermesPointerModeDesktop;
+}
+
+- (void)placeWindowOnTargetScreen {
+    NSWindow *window = self.view.window;
+    NSScreen *screen = self.targetScreen ?: window.screen ?: [NSScreen mainScreen];
+    if (window == nil || screen == nil || self.streamWidth <= 0 || self.streamHeight <= 0) {
+        return;
+    }
+    NSRect visible = screen.visibleFrame;
+    CGFloat aspect = (CGFloat)self.streamWidth / (CGFloat)self.streamHeight;
+    CGFloat width = NSWidth(visible) * 0.85;
+    CGFloat height = width / aspect;
+    if (height > NSHeight(visible) * 0.85) {
+        height = NSHeight(visible) * 0.85;
+        width = height * aspect;
+    }
+    NSRect content = NSMakeRect(0, 0, width, height);
+    NSRect frame = [window frameRectForContentRect:content];
+    frame.origin.x = NSMidX(visible) - NSWidth(frame) / 2;
+    frame.origin.y = NSMidY(visible) - NSHeight(frame) / 2;
+    [window setFrame:frame display:YES];
 }
 
 /// Where the remote picture is drawn inside `bounds` for the current Fit / Fill / Stretch mode.
@@ -292,16 +314,18 @@
         return;
     }
     NSPoint p = [self.streamView convertPoint:event.locationInWindow fromView:nil];
+    if (!NSPointInRect(p, self.streamView.bounds)) {
+        return;
+    }
     NSRect video = [self videoRectInBounds:self.streamView.bounds];
     if (NSWidth(video) <= 0 || NSHeight(video) <= 0) {
         return;
     }
     CGFloat x = (p.x - NSMinX(video)) / NSWidth(video) * self.streamWidth;
     CGFloat y = (self.streamView.isFlipped ? (p.y - NSMinY(video)) : (NSMaxY(video) - p.y)) / NSHeight(video) * self.streamHeight;
-    if (x < 0 || y < 0 || x >= self.streamWidth || y >= self.streamHeight) {
-        // Over the letterbox bars
-        return;
-    }
+    // Over the letterbox bars, pin to the nearest edge of the picture
+    x = MAX(0, MIN(x, self.streamWidth - 1));
+    y = MAX(0, MIN(y, self.streamHeight - 1));
     LiSendMousePositionEvent((short)x, (short)y, (short)self.streamWidth, (short)self.streamHeight);
 }
 
@@ -319,6 +343,11 @@
 }
 
 - (void)deactivateDesktopInput {
+    if (self.desktopInputActive && self.connectionReady) {
+        LiSendMouseButtonEvent(BUTTON_ACTION_RELEASE, BUTTON_LEFT);
+        LiSendMouseButtonEvent(BUTTON_ACTION_RELEASE, BUTTON_RIGHT);
+        LiSendMouseButtonEvent(BUTTON_ACTION_RELEASE, BUTTON_MIDDLE);
+    }
     self.desktopInputActive = NO;
     self.hidSupport.shouldSendInputEvents = NO;
     self.controllerSupport.shouldSendInputEvents = NO;
@@ -440,7 +469,7 @@
 }
 
 - (IBAction)resizeWindowToActualResulution:(id)sender {
-    CGFloat screenScale = [NSScreen mainScreen].backingScaleFactor;
+    CGFloat screenScale = self.view.window.backingScaleFactor > 0 ? self.view.window.backingScaleFactor : [NSScreen mainScreen].backingScaleFactor;
     CGFloat width = (CGFloat)self.streamWidth / screenScale;
     CGFloat height = (CGFloat)self.streamHeight / screenScale;
     [self.view.window setContentSize:NSMakeSize(width, height)];
@@ -456,10 +485,14 @@
 }
 
 - (void)captureMouse {
+    if (self.sessionPanel.isOpen) {
+        return;
+    }
     if (self.usesDesktopPointer) {
         [self activateDesktopInput];
         return;
     }
+    self.hidSupport.absolutePointer = NO;
     CGAssociateMouseAndMouseCursorPosition(NO);
     if (self.cursorHiddenCounter == 0) {
         [NSCursor hide];
@@ -589,8 +622,19 @@
     DataManager* dataMan = [[DataManager alloc] init];
     TemporarySettings* streamSettings = [dataMan getSettings];
     
-    streamConfig.width = [self.class getResolution].width;
-    streamConfig.height = [self.class getResolution].height;
+    self.targetScreen = [HermesSettings preferredScreen];
+    if ([HermesSettings matchDisplay]) {
+        // Same HEVC decision Connection.m makes, plus whether the host can encode HEVC
+        BOOL hostHevc = (self.app.host.serverCodecModeSupport & 0x0300) != 0;
+        BOOL hevc = (streamSettings.useHevc || streamSettings.enableHdr) && hostHevc && VTIsHardwareDecodeSupported(kCMVideoCodecType_HEVC);
+        CGSize size = [HermesSettings displayResolutionForScreen:self.targetScreen allowHevc:hevc];
+        streamConfig.width = (int)size.width;
+        streamConfig.height = (int)size.height;
+    } else {
+        struct Resolution resolution = [self.class getResolution];
+        streamConfig.width = resolution.width;
+        streamConfig.height = resolution.height;
+    }
     self.streamWidth = streamConfig.width;
     self.streamHeight = streamConfig.height;
 
@@ -617,6 +661,7 @@
             self.controllerSupport = [[ControllerSupport alloc] initWithConfig:streamConfig presenceDelegate:self];
         }
     }
+    self.sessionPointerMode = [HermesSettings pointerMode];
     self.hidSupport = [[HIDSupport alloc] init:self.app.host];
     self.hidSupport.absolutePointer = self.usesDesktopPointer;
     
@@ -634,14 +679,6 @@
 
     struct Resolution resolution;
     
-    if ([HermesSettings matchDisplay]) {
-        // Hermes: stream at this Mac's own resolution so the remote desktop is pixel-perfect
-        CGSize size = [HermesSettings displayResolutionForScreen:[HermesSettings preferredScreen] allowHevc:streamSettings.useHevc];
-        resolution.width = (int)size.width;
-        resolution.height = (int)size.height;
-        return resolution;
-    }
-
     resolution.width = [streamSettings.width intValue];
     resolution.height = [streamSettings.height intValue];
 
@@ -749,6 +786,7 @@ static char hermesModifierForVK(short vk) {
     [self.hidSupport releaseAllModifierKeys];
     [self uncaptureMouse];
     [HermesSettings setPointerMode:(HermesPointerMode)mode];
+    self.sessionPointerMode = (HermesPointerMode)mode;
     self.hidSupport.absolutePointer = self.usesDesktopPointer;
     // Desktop pointer resumes as soon as the panel closes; captured mode waits for a click
 }

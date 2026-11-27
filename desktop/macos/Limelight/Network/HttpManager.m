@@ -14,6 +14,7 @@
 #include <libxml2/libxml/xmlreader.h>
 #include <string.h>
 #include <CommonCrypto/CommonDigest.h>
+#import <SystemConfiguration/SystemConfiguration.h>
 
 #include <Limelight.h>
 
@@ -39,13 +40,18 @@
 
 // The name Apollo shows for this client after pairing: this Mac's name.
 static NSString* hermesDeviceName(void) {
-    NSString* name = [[NSHost currentHost] localizedName];
-    if (name.length == 0) {
-        name = @"Hermes Mac";
-    }
-    NSMutableCharacterSet* allowed = [[NSCharacterSet alphanumericCharacterSet] mutableCopy];
-    [allowed addCharactersInString:@"-._~"];
-    return [name stringByAddingPercentEncodingWithAllowedCharacters:allowed] ?: @"Hermes";
+    static NSString* encoded;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        NSString* name = CFBridgingRelease(SCDynamicStoreCopyComputerName(NULL, NULL));
+        if (name.length == 0) {
+            name = @"Hermes Mac";
+        }
+        NSMutableCharacterSet* allowed = [[NSCharacterSet alphanumericCharacterSet] mutableCopy];
+        [allowed addCharactersInString:@"-._~"];
+        encoded = [name stringByAddingPercentEncodingWithAllowedCharacters:allowed] ?: @"Hermes";
+    });
+    return encoded;
 }
 
 static const NSString* HTTP_PORT = @"47989";

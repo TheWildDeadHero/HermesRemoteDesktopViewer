@@ -34,6 +34,7 @@
 
     CVDisplayLinkRef _displayLink;
     id _scaleModeObserver;
+    id _defaultsObserver;
 }
 
 - (void)reinitializeDisplayLayer
@@ -81,6 +82,12 @@ static CGDirectDisplayID getDisplayID(NSScreen* screen)
     _scaleModeObserver = [[NSNotificationCenter defaultCenter] addObserverForName:[HermesSettings scaleModeDidChangeNotification] object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
         typeof(self) strongSelf = weakSelf;
         if (strongSelf != nil) {
+            strongSelf->displayLayer.videoGravity = [HermesSettings videoGravity];
+        }
+    }];
+    _defaultsObserver = [[NSNotificationCenter defaultCenter] addObserverForName:NSUserDefaultsDidChangeNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
+        typeof(self) strongSelf = weakSelf;
+        if (strongSelf != nil && ![strongSelf->displayLayer.videoGravity isEqualToString:[HermesSettings videoGravity]]) {
             strongSelf->displayLayer.videoGravity = [HermesSettings videoGravity];
         }
     }];
@@ -164,6 +171,9 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
 {
     if (_scaleModeObserver != nil) {
         [[NSNotificationCenter defaultCenter] removeObserver:_scaleModeObserver];
+    }
+    if (_defaultsObserver != nil) {
+        [[NSNotificationCenter defaultCenter] removeObserver:_defaultsObserver];
     }
     [self stop];
 }

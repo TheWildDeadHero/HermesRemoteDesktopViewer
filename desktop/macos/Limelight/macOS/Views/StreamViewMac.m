@@ -58,10 +58,9 @@
     if (self.reorderingOverlays || self.overlayViews.count == 0 || [self.overlayViews containsObject:subview]) {
         return;
     }
+    // Move the new view below the overlays (leaves the panel's first responder alone)
     self.reorderingOverlays = YES;
-    for (NSView *overlay in self.overlayViews) {
-        [self addSubview:overlay positioned:NSWindowAbove relativeTo:nil];
-    }
+    [self addSubview:subview positioned:NSWindowBelow relativeTo:self.overlayViews.firstObject];
     self.reorderingOverlays = NO;
 }
 

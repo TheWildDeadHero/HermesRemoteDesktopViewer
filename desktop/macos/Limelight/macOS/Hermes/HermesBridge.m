@@ -183,7 +183,6 @@
 #pragma mark - Stream window delegate adapter
 
 @interface HermesStreamDelegate : NSObject <AppsViewControllerDelegate>
-@property (nonatomic, copy) void (^onSessionEnded)(void);
 @end
 
 @implementation HermesStreamDelegate
@@ -206,9 +205,8 @@
 }
 
 - (void)appDidQuit:(TemporaryApp *)app {
-    if (self.onSessionEnded) {
-        self.onSessionEnded();
-    }
+    // The stream window may still be open (e.g. showing a connection error); the
+    // session is only over for Hermes once that window closes.
 }
 
 - (void)didOpenContextMenu:(NSMenu *)menu forApp:(TemporaryApp *)app {
@@ -350,6 +348,11 @@
         NSString *error = nil;
         if (body != nil && status == 200) {
             text = [[NSString alloc] initWithData:body encoding:NSUTF8StringEncoding];
+            // Hosts without clipboard support answer with a 200 and an XML error body
+            NSString *head = [text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+            if ([head hasPrefix:@"<?xml"] || ([head hasPrefix:@"<root"] && [head containsString:@"status_code"])) {
+                text = nil;
+            }
         }
         if (text == nil) {
             error = (status == 401 || status == 403)
@@ -388,7 +391,6 @@
     StreamViewController *streamVC = [storyboard instantiateControllerWithIdentifier:@"streamVC"];
 
     HermesStreamDelegate *delegate = [[HermesStreamDelegate alloc] init];
-    delegate.onSessionEnded = onSessionEnded;
     streamVC.app = app;
     streamVC.delegate = delegate; // weak; kept alive below
 

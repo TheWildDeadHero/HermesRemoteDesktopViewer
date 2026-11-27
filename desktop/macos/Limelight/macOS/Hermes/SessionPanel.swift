@@ -283,7 +283,7 @@ private struct PanelButton: View {
 
 private struct SessionPanelView: View {
     @ObservedObject var model: SessionPanelModel
-    let controller: SessionPanelController
+    weak var controller: SessionPanelController?
     @SwiftUI.State private var confirmEnd = false
 
     private let columns = [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)]
@@ -297,7 +297,7 @@ private struct SessionPanelView: View {
                     PanelSection(title: "Pointer") {
                         Picker("", selection: Binding(
                             get: { model.pointerMode },
-                            set: { model.pointerMode = $0; controller.setPointerMode($0) }
+                            set: { model.pointerMode = $0; controller?.setPointerMode($0) }
                         )) {
                             Text("Desktop").tag(HermesPointerMode.desktop)
                             Text("Captured").tag(HermesPointerMode.captured)
@@ -316,7 +316,7 @@ private struct SessionPanelView: View {
                         LazyVGrid(columns: columns, spacing: 8) {
                             ForEach(quickKeys) { key in
                                 PanelButton(title: key.title, symbol: key.symbol) {
-                                    controller.send(key.keys)
+                                    controller?.send(key.keys)
                                 }
                             }
                         }
@@ -329,7 +329,7 @@ private struct SessionPanelView: View {
                     PanelSection(title: "Display") {
                         Picker("", selection: Binding(
                             get: { model.scaleMode },
-                            set: { model.scaleMode = $0; controller.setScaleMode($0) }
+                            set: { model.scaleMode = $0; controller?.setScaleMode($0) }
                         )) {
                             Text("Fit").tag(HermesScaleMode.fit)
                             Text("Fill").tag(HermesScaleMode.fill)
@@ -340,20 +340,20 @@ private struct SessionPanelView: View {
                         LazyVGrid(columns: columns, spacing: 8) {
                             PanelButton(title: model.isFullScreen ? "Exit full screen" : "Full screen",
                                         symbol: model.isFullScreen ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right") {
-                                controller.toggleFullScreen()
+                                controller?.toggleFullScreen()
                             }
                             PanelButton(title: "Actual size", symbol: "1.magnifyingglass") {
-                                controller.actualSize()
+                                controller?.actualSize()
                             }
                         }
                     }
 
                     PanelSection(title: "Clipboard") {
                         PanelButton(title: "Send this Mac's clipboard", symbol: "arrow.up.doc.on.clipboard") {
-                            controller.sendClipboard()
+                            controller?.sendClipboard()
                         }
                         PanelButton(title: "Copy the computer's clipboard", symbol: "arrow.down.doc") {
-                            controller.getClipboard()
+                            controller?.getClipboard()
                         }
                     }
                 }
@@ -380,7 +380,7 @@ private struct SessionPanelView: View {
                 .controlSize(.large)
 
                 Button {
-                    controller.disconnect()
+                    controller?.disconnect()
                 } label: {
                     Label("Disconnect", systemImage: "rectangle.portrait.and.arrow.right")
                         .frame(maxWidth: .infinity)
@@ -392,12 +392,12 @@ private struct SessionPanelView: View {
         }
         .background(VisualEffectBackground())
         .colorScheme(.dark)
-        .onExitCommand { controller.close() }
+        .onExitCommand { controller?.close() }
         .alert(isPresented: $confirmEnd) {
             Alert(
                 title: Text("End the remote session?"),
                 message: Text("Apps stay open on \(model.computerName), but its virtual display closes."),
-                primaryButton: .destructive(Text("End session")) { controller.endSession() },
+                primaryButton: .destructive(Text("End session")) { controller?.endSession() },
                 secondaryButton: .cancel()
             )
         }
@@ -422,7 +422,7 @@ private struct SessionPanelView: View {
             }
             Spacer()
             Button {
-                controller.close()
+                controller?.close()
             } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: 12, weight: .semibold))

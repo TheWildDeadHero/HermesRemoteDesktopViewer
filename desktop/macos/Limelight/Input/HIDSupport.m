@@ -498,28 +498,28 @@ SwitchCommonOutputPacket_t switchRumblePacket;
     };
     
     mouse.mouseInput.leftButton.pressedChangedHandler = ^(GCControllerButtonInput * _Nonnull button, float value, BOOL pressed) {
-        if (self.shouldSendInputEvents) {
+        if (self.shouldSendInputEvents && !self.absolutePointer) {
             LiSendMouseButtonEvent(pressed ? BUTTON_ACTION_PRESS : BUTTON_ACTION_RELEASE, BUTTON_LEFT);
         }
     };
     mouse.mouseInput.middleButton.pressedChangedHandler = ^(GCControllerButtonInput * _Nonnull button, float value, BOOL pressed) {
-        if (self.shouldSendInputEvents) {
+        if (self.shouldSendInputEvents && !self.absolutePointer) {
             LiSendMouseButtonEvent(pressed ? BUTTON_ACTION_PRESS : BUTTON_ACTION_RELEASE, BUTTON_MIDDLE);
         }
     };
     mouse.mouseInput.rightButton.pressedChangedHandler = ^(GCControllerButtonInput * _Nonnull button, float value, BOOL pressed) {
-        if (self.shouldSendInputEvents) {
+        if (self.shouldSendInputEvents && !self.absolutePointer) {
             LiSendMouseButtonEvent(pressed ? BUTTON_ACTION_PRESS : BUTTON_ACTION_RELEASE, BUTTON_RIGHT);
         }
     };
     
     mouse.mouseInput.auxiliaryButtons[0].pressedChangedHandler = ^(GCControllerButtonInput * _Nonnull button, float value, BOOL pressed) {
-        if (self.shouldSendInputEvents) {
+        if (self.shouldSendInputEvents && !self.absolutePointer) {
             LiSendMouseButtonEvent(pressed ? BUTTON_ACTION_PRESS : BUTTON_ACTION_RELEASE, BUTTON_X1);
         }
     };
     mouse.mouseInput.auxiliaryButtons[1].pressedChangedHandler = ^(GCControllerButtonInput * _Nonnull button, float value, BOOL pressed) {
-        if (self.shouldSendInputEvents) {
+        if (self.shouldSendInputEvents && !self.absolutePointer) {
             LiSendMouseButtonEvent(pressed ? BUTTON_ACTION_PRESS : BUTTON_ACTION_RELEASE, BUTTON_X2);
         }
     };
@@ -667,7 +667,7 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
 }
 
 - (void)mouseDown:(NSEvent *)event withButton:(int)button {
-    if (self.useGCMouse) {
+    if (self.useGCMouse && !self.absolutePointer) {
         return;
     }
     
@@ -677,7 +677,7 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
 }
 
 - (void)mouseUp:(NSEvent *)event withButton:(int)button {
-    if (self.useGCMouse) {
+    if (self.useGCMouse && !self.absolutePointer) {
         return;
     }
     

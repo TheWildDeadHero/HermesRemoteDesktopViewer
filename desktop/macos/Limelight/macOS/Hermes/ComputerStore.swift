@@ -77,7 +77,10 @@ final class ComputerStore: ObservableObject {
 
     private let directory = HermesHostDirectory()
     private var refreshTimer: Timer?
-    private var streamWindows: [String: NSWindowController] = [:]
+    /// Moonlight's streaming core runs one session at a time, so so does Hermes.
+    private var stream: (hostId: String, name: String, token: UUID, controller: NSWindowController)?
+    private var lastStreamClosed = Date.distantPast
+    private var pairingInProgress = false
     private var wakeConnect: (id: String, deadline: Date)?
     private var bannerWork: DispatchWorkItem?
     private var started = false
@@ -135,7 +138,7 @@ final class ComputerStore: ObservableObject {
                 status: status,
                 canWake: (host.mac?.isEmpty == false) && host.mac != "00:00:00:00:00:00",
                 hasVirtualDisplay: host.vDisplaySupported,
-                isStreaming: streamWindows[host.uuid] != nil
+                isStreaming: stream?.hostId == host.uuid
             )
         }
         // Online computers first, then by name (Chrome Remote Desktop ordering)
@@ -184,7 +187,11 @@ final class ComputerStore: ObservableObject {
                                   text: "Make sure it's turned on, connected to the network and running Apollo.")
             }
         case .needsPairing:
-            sheet = .pair(computer)
+            if pairingInProgress {
+                showBanner("Already pairing. Finish that first.")
+            } else {
+                sheet = .pair(computer)
+            }
         case .online, .inSession:
             connect(computer)
         }
@@ -193,8 +200,14 @@ final class ComputerStore: ObservableObject {
     // MARK: Connecting
 
     func connect(_ computer: Computer, chooseDesktop: Bool = false) {
-        if let existing = streamWindows[computer.id], !chooseDesktop {
-            existing.window?.makeKeyAndOrderFront(nil)
+        if let current = stream {
+            if current.hostId == computer.id && !chooseDesktop {
+                current.controller.window?.makeKeyAndOrderFront(nil)
+            } else {
+                current.controller.window?.makeKeyAndOrderFront(nil)
+                message = Message(title: "You're connected to \(current.name)",
+                                  text: "Hermes connects to one computer at a time. Disconnect from \(current.name) first (Session controls → Disconnect, or close its window).")
+            }
             return
         }
         guard let host = host(computer.id) else { return }
@@ -257,16 +270,28 @@ final class ComputerStore: ObservableObject {
     }
 
     private func launch(host: TemporaryHost, appId: String) {
+        guard stream == nil else { return }
+        // The previous session stops ~0.25 s after its window closes; don't overlap it
+        let wait = 1.0 - Date().timeIntervalSince(lastStreamClosed)
+        if wait > 0 {
+            busyText = "Connecting to \(host.name)…"
+            DispatchQueue.main.asyncAfter(deadline: .now() + wait) { [weak self] in
+                self?.busyText = nil
+                self?.launch(host: host, appId: appId)
+            }
+            return
+        }
+
         let name = host.name.isEmpty ? "Remote desktop" : host.name
         let app = HermesHostActions.makeApp(id: appId, name: name, host: host)
-        let id = host.uuid
+        let token = UUID()
         let controller = HermesHostActions.openStreamWindow(for: app) { [weak self] in
-            guard let self = self else { return }
-            if self.streamWindows.removeValue(forKey: id) != nil {
-                self.refresh()
-            }
+            guard let self = self, self.stream?.token == token else { return }
+            self.stream = nil
+            self.lastStreamClosed = Date()
+            self.refresh()
         }
-        streamWindows[id] = controller
+        stream = (host.uuid, name, token, controller)
         refresh()
     }
 
@@ -350,12 +375,15 @@ final class ComputerStore: ObservableObject {
     /// Pairs, then connects. With a PIN + passphrase from Apollo's web UI this is Apollo's
     /// one-time-PIN flow; without them Hermes shows a PIN to type into Apollo.
     func pair(_ computer: Computer, otpPin: String?, passphrase: String?) {
-        guard let host = host(computer.id) else { return }
+        guard let host = host(computer.id), !pairingInProgress else { return }
         let otp = (otpPin?.isEmpty == false && passphrase?.isEmpty == false)
         sheet = nil
         busyText = otp ? "Pairing with \(computer.name)…" : nil
+        pairingInProgress = true
 
-        // Polling the host while pairing confuses it, so stop discovery first (this blocks)
+        // Polling the host while pairing confuses it: stop discovery here, then wait
+        // for in-flight polls to finish off the main thread
+        directory.stop()
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             self?.directory.pauseBlocking()
             DispatchQueue.main.async {
@@ -366,6 +394,7 @@ final class ComputerStore: ObservableObject {
                                        },
                                        completion: { [weak self] success, error in
                                            guard let self = self else { return }
+                                           self.pairingInProgress = false
                                            self.busyText = nil
                                            if case .some(.showPin(_, _)) = self.sheet { self.sheet = nil }
                                            self.directory.start()

@@ -317,7 +317,7 @@ private struct PairSheet: View {
     @SwiftUI.State private var passphrase = ""
 
     private var otpValid: Bool {
-        pin.count == 4 && pin.allSatisfy(\.isNumber) && passphrase.count >= 4
+        pin.count == 4 && pin.allSatisfy { $0.isASCII && $0.isNumber } && passphrase.count >= 4
     }
 
     var body: some View {
