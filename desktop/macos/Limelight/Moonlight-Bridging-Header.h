@@ -4,3 +4,7 @@
 
 #import "DataManager.h"
 #import "TemporaryHost.h"
+
+// Hermes
+#import "HermesBridge.h"
+#import "HermesSessionActions.h"

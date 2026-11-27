@@ -100,6 +100,12 @@
 				"macOS/Helpers/NSWindow+Moonlight.m",
 				macOS/Helpers/NumberOnlyFormatter.swift,
 				macOS/Helpers/ViewExtensions.swift,
+				macOS/Hermes/ComputerListView.swift,
+				macOS/Hermes/ComputerListViewController.swift,
+				macOS/Hermes/ComputerStore.swift,
+				macOS/Hermes/HermesBridge.m,
+				macOS/Hermes/HermesSettings.swift,
+				macOS/Hermes/SessionPanel.swift,
 				macOS/HostCell.xib,
 				"macOS/Supporting Files/main.m",
 				macOS/ViewControllers/AboutView.xib,
@@ -359,7 +365,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 11.0;
+				MACOSX_DEPLOYMENT_TARGET = 12.0;
 				MARKETING_VERSION = 1.0.0;
 				MTL_ENABLE_DEBUG_INFO = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = io.github.thewilddeadhero.hermes.mac;
@@ -409,7 +415,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 11.0;
+				MACOSX_DEPLOYMENT_TARGET = 12.0;
 				MARKETING_VERSION = 1.0.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				PRODUCT_BUNDLE_IDENTIFIER = io.github.thewilddeadhero.hermes.mac;
@@ -465,7 +471,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 11.0;
+				MACOSX_DEPLOYMENT_TARGET = 12.0;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = macosx;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -513,7 +519,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 11.0;
+				MACOSX_DEPLOYMENT_TARGET = 12.0;
 				PROVISIONING_PROFILE = "";
 				SDKROOT = macosx;
 				SWIFT_COMPILATION_MODE = wholemodule;

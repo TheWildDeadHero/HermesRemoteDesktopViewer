@@ -21,6 +21,8 @@
 #import "HIDSupport.h"
 
 #import "Moonlight-Swift.h"
+#import "HermesBridge.h"
+#import "HermesSessionActions.h"
 
 #include "Limelight.h"
 
@@ -29,7 +31,7 @@
 #import <IOKit/pwr_mgt/IOPMLib.h>
 #import <Carbon/Carbon.h>
 
-@interface StreamViewController () <ConnectionCallbacks, KeyboardNotifiableDelegate, InputPresenceDelegate>
+@interface StreamViewController () <ConnectionCallbacks, KeyboardNotifiableDelegate, InputPresenceDelegate, HermesSessionActions>
 
 @property (nonatomic, strong) ControllerSupport *controllerSupport;
 @property (nonatomic, strong) HIDSupport *hidSupport;
@@ -44,6 +46,15 @@
 @property (nonatomic) int cursorHiddenCounter;
 
 @property (nonatomic) IOPMAssertionID powerAssertionID;
+
+// Hermes
+@property (nonatomic, strong) HermesSessionPanelController *sessionPanel;
+@property (nonatomic) BOOL connectionReady;
+@property (nonatomic) BOOL desktopInputActive;
+@property (nonatomic) int streamWidth;
+@property (nonatomic) int streamHeight;
+@property (nonatomic) int streamFps;
+@property (nonatomic, copy) NSString *defaultSubtitle;
 
 @end
 
@@ -87,6 +98,11 @@
     }];
     
     self.windowDidResignKeyNotification = [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidResignKeyNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
+        if ([weakSelf usesDesktopPointer] && [weakSelf isOurWindowTheWindowInNotiifcation:note]) {
+            [weakSelf.hidSupport releaseAllModifierKeys];
+            [weakSelf uncaptureMouse];
+            return;
+        }
         if ([weakSelf isOurWindowTheWindowInNotiifcation:note]) {
             if (![weakSelf isWindowInCurrentSpace] || ![weakSelf isWindowFullscreen]) {
                 [weakSelf uncaptureMouse];
@@ -94,6 +110,11 @@
         }
     }];
     self.windowDidBecomeKeyNotification = [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidBecomeKeyNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
+        if ([weakSelf usesDesktopPointer] && [weakSelf isOurWindowTheWindowInNotiifcation:note]) {
+            // Desktop pointer: input follows window focus, nothing to capture
+            [weakSelf captureMouse];
+            return;
+        }
         if ([weakSelf isOurWindowTheWindowInNotiifcation:note]) {
             if ([weakSelf isWindowInCurrentSpace]) {
                 if ([weakSelf isWindowFullscreen]) {
@@ -130,11 +151,20 @@
     self.view.window.tabbingMode = NSWindowTabbingModeDisallowed;
     [self.view.window makeFirstResponder:self];
     
-    self.view.window.contentAspectRatio = NSMakeSize([self.class getResolution].width, [self.class getResolution].height);
+    self.view.window.contentAspectRatio = NSMakeSize(self.streamWidth, self.streamHeight);
     self.view.window.frameAutosaveName = @"Stream Window";
     [self.view.window moonlight_centerWindowOnFirstRunWithSize:CGSizeMake(1008, 595)];
     
     self.view.window.appearance = [NSAppearance appearanceNamed:NSAppearanceNameVibrantDark];
+
+    if (self.sessionPanel == nil) {
+        NSString *name = self.app.host.name.length > 0 ? self.app.host.name : (self.app.name ?: @"Remote desktop");
+        self.sessionPanel = [[HermesSessionPanelController alloc] initWithComputerName:name actions:self];
+        for (NSView *overlay in self.sessionPanel.overlayViews) {
+            [self.streamView addOverlayView:overlay];
+        }
+        [self.sessionPanel layoutInBounds:self.streamView.bounds];
+    }
 }
 
 - (void)dealloc {
@@ -151,7 +181,7 @@
 - (void)flagsChanged:(NSEvent *)event {
     [self.hidSupport flagsChanged:event];
     
-    if (event.modifierFlags == 786721) {
+    if (event.modifierFlags == 786721 && !self.usesDesktopPointer) {
         [self.hidSupport releaseAllModifierKeys];
         [self uncaptureMouse];
     }
@@ -167,6 +197,17 @@
 
 
 - (void)mouseDown:(NSEvent *)event {
+    if (self.sessionPanel.isOpen) {
+        // Clicking the picture closes the panel, like Chrome Remote Desktop
+        [self.sessionPanel close];
+        return;
+    }
+    if (self.usesDesktopPointer) {
+        [self captureMouse];
+        [self sendAbsolutePositionForEvent:event];
+        [self.hidSupport mouseDown:event withButton:BUTTON_LEFT];
+        return;
+    }
     [self.hidSupport mouseDown:event withButton:BUTTON_LEFT];
     [self captureMouse];
 }
@@ -176,6 +217,10 @@
 }
 
 - (void)rightMouseDown:(NSEvent *)event {
+    if (self.sessionPanel.isOpen) {
+        return;
+    }
+    [self sendAbsolutePositionForEvent:event];
     [self.hidSupport mouseDown:event withButton:BUTTON_RIGHT];
 }
 
@@ -200,19 +245,85 @@
 }
 
 - (void)mouseMoved:(NSEvent *)event {
+    [self sendAbsolutePositionForEvent:event];
     [self.hidSupport mouseMoved:event];
 }
 
 - (void)mouseDragged:(NSEvent *)event {
+    [self sendAbsolutePositionForEvent:event];
     [self.hidSupport mouseMoved:event];
 }
 
 - (void)rightMouseDragged:(NSEvent *)event {
+    [self sendAbsolutePositionForEvent:event];
     [self.hidSupport mouseMoved:event];
 }
 
 - (void)otherMouseDragged:(NSEvent *)event {
+    [self sendAbsolutePositionForEvent:event];
     [self.hidSupport mouseMoved:event];
+}
+
+#pragma mark - Hermes desktop pointer
+
+- (BOOL)usesDesktopPointer {
+    return [HermesSettings pointerMode] == HermesPointerModeDesktop;
+}
+
+/// Where the remote picture is drawn inside `bounds` for the current Fit / Fill / Stretch mode.
+- (NSRect)videoRectInBounds:(NSRect)bounds {
+    if (self.streamWidth <= 0 || self.streamHeight <= 0) {
+        return NSZeroRect;
+    }
+    HermesScaleMode mode = [HermesSettings scaleMode];
+    if (mode == HermesScaleModeStretch) {
+        return bounds;
+    }
+    CGFloat sx = NSWidth(bounds) / self.streamWidth;
+    CGFloat sy = NSHeight(bounds) / self.streamHeight;
+    CGFloat scale = (mode == HermesScaleModeFill) ? MAX(sx, sy) : MIN(sx, sy);
+    CGFloat w = self.streamWidth * scale;
+    CGFloat h = self.streamHeight * scale;
+    return NSMakeRect(NSMidX(bounds) - w / 2, NSMidY(bounds) - h / 2, w, h);
+}
+
+- (void)sendAbsolutePositionForEvent:(NSEvent *)event {
+    if (!self.usesDesktopPointer || !self.desktopInputActive || !self.hidSupport.shouldSendInputEvents) {
+        return;
+    }
+    NSPoint p = [self.streamView convertPoint:event.locationInWindow fromView:nil];
+    NSRect video = [self videoRectInBounds:self.streamView.bounds];
+    if (NSWidth(video) <= 0 || NSHeight(video) <= 0) {
+        return;
+    }
+    CGFloat x = (p.x - NSMinX(video)) / NSWidth(video) * self.streamWidth;
+    CGFloat y = (self.streamView.isFlipped ? (p.y - NSMinY(video)) : (NSMaxY(video) - p.y)) / NSHeight(video) * self.streamHeight;
+    if (x < 0 || y < 0 || x >= self.streamWidth || y >= self.streamHeight) {
+        // Over the letterbox bars
+        return;
+    }
+    LiSendMousePositionEvent((short)x, (short)y, (short)self.streamWidth, (short)self.streamHeight);
+}
+
+- (void)activateDesktopInput {
+    if (!self.connectionReady || self.sessionPanel.isOpen || !self.view.window.isKeyWindow) {
+        return;
+    }
+    self.desktopInputActive = YES;
+    self.hidSupport.absolutePointer = YES;
+    self.hidSupport.shouldSendInputEvents = YES;
+    self.controllerSupport.shouldSendInputEvents = YES;
+    self.view.window.acceptsMouseMovedEvents = YES;
+    self.streamView.hidesCursor = YES;
+    [self disallowDisplaySleep];
+}
+
+- (void)deactivateDesktopInput {
+    self.desktopInputActive = NO;
+    self.hidSupport.shouldSendInputEvents = NO;
+    self.controllerSupport.shouldSendInputEvents = NO;
+    self.streamView.hidesCursor = NO;
+    [self allowDisplaySleep];
 }
 
 - (void)scrollWheel:(NSEvent *)event {
@@ -245,6 +356,18 @@
 - (BOOL)onKeyboardEquivalent:(NSEvent *)event {
     const NSEventModifierFlags modifierFlags = NSEventModifierFlagShift | NSEventModifierFlagControl | NSEventModifierFlagOption | NSEventModifierFlagCommand | NSEventModifierFlagFunction;
     const NSEventModifierFlags eventModifierFlags = event.modifierFlags & modifierFlags;
+
+    // While the session panel is open, shortcuts belong to this Mac
+    if (self.sessionPanel.isOpen) {
+        return NO;
+    }
+
+    // Hermes' Session menu shortcuts (⌃⌥⌘S / V / C) stay on this Mac
+    if (eventModifierFlags == (NSEventModifierFlagControl | NSEventModifierFlagOption | NSEventModifierFlagCommand)
+        && (event.keyCode == kVK_ANSI_S || event.keyCode == kVK_ANSI_V || event.keyCode == kVK_ANSI_C)) {
+        [self.hidSupport releaseAllModifierKeys];
+        return NO;
+    }
     
     if (event.keyCode == kVK_ANSI_1 && eventModifierFlags == NSEventModifierFlagCommand) {
         [self.hidSupport releaseAllModifierKeys];
@@ -318,8 +441,8 @@
 
 - (IBAction)resizeWindowToActualResulution:(id)sender {
     CGFloat screenScale = [NSScreen mainScreen].backingScaleFactor;
-    CGFloat width = (CGFloat)[self.class getResolution].width / screenScale;
-    CGFloat height = (CGFloat)[self.class getResolution].height / screenScale;
+    CGFloat width = (CGFloat)self.streamWidth / screenScale;
+    CGFloat height = (CGFloat)self.streamHeight / screenScale;
     [self.view.window setContentSize:NSMakeSize(width, height)];
 }
 
@@ -333,6 +456,10 @@
 }
 
 - (void)captureMouse {
+    if (self.usesDesktopPointer) {
+        [self activateDesktopInput];
+        return;
+    }
     CGAssociateMouseAndMouseCursorPosition(NO);
     if (self.cursorHiddenCounter == 0) {
         [NSCursor hide];
@@ -355,6 +482,10 @@
 }
 
 - (void)uncaptureMouse {
+    if (self.usesDesktopPointer) {
+        [self deactivateDesktopInput];
+        return;
+    }
     CGAssociateMouseAndMouseCursorPosition(YES);
     if (self.cursorHiddenCounter != 0) {
         [NSCursor unhide];
@@ -460,6 +591,8 @@
     
     streamConfig.width = [self.class getResolution].width;
     streamConfig.height = [self.class getResolution].height;
+    self.streamWidth = streamConfig.width;
+    self.streamHeight = streamConfig.height;
 
     streamConfig.frameRate = [streamSettings.framerate intValue];
     streamConfig.bitRate = [streamSettings.bitrate intValue];
@@ -473,12 +606,18 @@
     
     streamConfig.audioConfiguration = AUDIO_CONFIGURATION_STEREO;
 
+    // Apollo: give the stream its own virtual display at this size, scaled like this Mac
+    streamConfig.useVirtualDisplay = [HermesSettings useVirtualDisplay] && self.app.host.vDisplaySupported && self.app.host.vDisplayDriverReady;
+    streamConfig.scaleFactor = [HermesSettings hostScaleFactorForScreen:[HermesSettings preferredScreen]];
+    self.streamFps = streamConfig.frameRate;
+
     if (self.useSystemControllerDriver) {
         if (@available(iOS 13, tvOS 13, macOS 10.15, *)) {
             self.controllerSupport = [[ControllerSupport alloc] initWithConfig:streamConfig presenceDelegate:self];
         }
     }
     self.hidSupport = [[HIDSupport alloc] init:self.app.host];
+    self.hidSupport.absolutePointer = self.usesDesktopPointer;
     
     self.streamMan = [[StreamManager alloc] initWithConfig:streamConfig renderView:self.view connectionCallbacks:self];
     NSOperationQueue* opQueue = [[NSOperationQueue alloc] init];
@@ -494,6 +633,14 @@
 
     struct Resolution resolution;
     
+    if ([HermesSettings matchDisplay]) {
+        // Hermes: stream at this Mac's own resolution so the remote desktop is pixel-perfect
+        CGSize size = [HermesSettings displayResolutionForScreen:[HermesSettings preferredScreen] allowHevc:streamSettings.useHevc];
+        resolution.width = (int)size.width;
+        resolution.height = (int)size.height;
+        return resolution;
+    }
+
     resolution.width = [streamSettings.width intValue];
     resolution.height = [streamSettings.height intValue];
 
@@ -517,12 +664,17 @@
 - (void)connectionStarted {
     dispatch_async(dispatch_get_main_queue(), ^{
         self.streamView.statusText = nil;
+        self.connectionReady = YES;
         
         if ([SettingsClass autoFullscreenFor:self.app.host.uuid]) {
             if (!(self.view.window.styleMask & NSWindowStyleMaskFullScreen)) {
                 [self.view.window toggleFullScreen:self];
             }
         } else {
+            [self captureMouse];
+        }
+        if (self.usesDesktopPointer) {
+            // Desktop pointer doesn't depend on full screen; start sending input right away
             [self captureMouse];
         }
     });
@@ -557,6 +709,198 @@
 - (void)connectionStatusUpdate:(int)status {
 }
 
+
+#pragma mark - Hermes session actions
+
+static char hermesModifierForVK(short vk) {
+    switch (vk) {
+        case 0xA0: case 0xA1: case 0x10: return MODIFIER_SHIFT;
+        case 0xA2: case 0xA3: case 0x11: return MODIFIER_CTRL;
+        case 0xA4: case 0xA5: case 0x12: return MODIFIER_ALT;
+        case 0x5B: case 0x5C: return MODIFIER_META;
+        default: return 0;
+    }
+}
+
+- (void)hermesSendKeyCombo:(NSArray<NSNumber *> *)virtualKeys {
+    if (!self.connectionReady || virtualKeys.count == 0) {
+        return;
+    }
+    char modifiers = 0;
+    for (NSNumber *key in virtualKeys) {
+        short vk = key.shortValue;
+        modifiers |= hermesModifierForVK(vk);
+        LiSendKeyboardEvent(0x8000 | vk, KEY_ACTION_DOWN, modifiers);
+    }
+    for (NSNumber *key in [virtualKeys reverseObjectEnumerator]) {
+        short vk = key.shortValue;
+        LiSendKeyboardEvent(0x8000 | vk, KEY_ACTION_UP, modifiers);
+        modifiers &= ~hermesModifierForVK(vk);
+    }
+}
+
+- (void)hermesSetScaleMode:(NSInteger)mode {
+    [HermesSettings setScaleMode:(HermesScaleMode)mode];
+}
+
+- (void)hermesSetPointerMode:(NSInteger)mode {
+    // Fully release whichever mode is active before switching
+    [self.hidSupport releaseAllModifierKeys];
+    [self uncaptureMouse];
+    [HermesSettings setPointerMode:(HermesPointerMode)mode];
+    self.hidSupport.absolutePointer = self.usesDesktopPointer;
+    // Desktop pointer resumes as soon as the panel closes; captured mode waits for a click
+}
+
+- (void)hermesToggleFullScreen {
+    [self.view.window toggleFullScreen:self];
+}
+
+- (BOOL)hermesIsFullScreen {
+    return [self isWindowFullscreen];
+}
+
+- (void)hermesResizeToActualSize {
+    if ([self isWindowFullscreen]) {
+        return;
+    }
+    [self resizeWindowToActualResulution:self];
+}
+
+- (void)hermesFlashStatus:(NSString *)message {
+    if (self.sessionPanel.isOpen) {
+        [self.sessionPanel showMessage:message];
+        return;
+    }
+    NSWindow *window = self.view.window;
+    window.subtitle = message;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(4 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        if ([window.subtitle isEqualToString:message]) {
+            window.subtitle = @"";
+        }
+    });
+}
+
+- (void)hermesSendClipboard {
+    NSString *text = [[NSPasteboard generalPasteboard] stringForType:NSPasteboardTypeString];
+    if (text.length == 0) {
+        [self hermesFlashStatus:@"Your clipboard doesn't contain any text."];
+        return;
+    }
+    __weak typeof(self) weakSelf = self;
+    [HermesHostActions sendClipboard:text toHost:self.app.host completion:^(BOOL success, NSString *error) {
+        [weakSelf hermesFlashStatus:success ? @"Clipboard sent. Paste it on the computer." : error];
+    }];
+}
+
+- (void)hermesGetClipboard {
+    __weak typeof(self) weakSelf = self;
+    [HermesHostActions getClipboardFromHost:self.app.host completion:^(NSString *text, NSString *error) {
+        if (text != nil) {
+            NSPasteboard *pb = [NSPasteboard generalPasteboard];
+            [pb clearContents];
+            [pb setString:text forType:NSPasteboardTypeString];
+            [weakSelf hermesFlashStatus:@"Copied the computer's clipboard to this Mac."];
+        } else {
+            [weakSelf hermesFlashStatus:error];
+        }
+    }];
+}
+
+- (void)hermesDisconnect {
+    [self performCloseStreamWindow:self];
+}
+
+- (void)hermesEndSession {
+    [self.hidSupport releaseAllModifierKeys];
+    [self performCloseAndQuitApp:self];
+}
+
+- (NSString *)hermesStatsText {
+    NSMutableString *text = [NSMutableString stringWithFormat:@"%d×%d · %d fps", self.streamWidth, self.streamHeight, self.streamFps];
+    uint32_t rtt = 0, rttVariance = 0;
+    if (self.connectionReady && LiGetEstimatedRttInfo(&rtt, &rttVariance)) {
+        [text appendFormat:@" · %u ms", rtt];
+    }
+    return text;
+}
+
+- (void)hermesPanelVisibilityChanged:(BOOL)visible {
+    if (visible) {
+        [self.hidSupport releaseAllModifierKeys];
+        [self uncaptureMouse];
+    } else {
+        [self.view.window makeFirstResponder:self];
+        if (self.usesDesktopPointer) {
+            [self captureMouse];
+        }
+    }
+}
+
+#pragma mark - Hermes Session menu
+
+- (IBAction)hermesToggleSessionPanel:(id)sender {
+    [self.sessionPanel toggle];
+}
+
+- (IBAction)hermesSendClipboard:(id)sender {
+    [self hermesSendClipboard];
+}
+
+- (IBAction)hermesGetClipboard:(id)sender {
+    [self hermesGetClipboard];
+}
+
+- (IBAction)hermesSendTaskManager:(id)sender {
+    [self hermesSendKeyCombo:@[@0xA2, @0xA0, @0x1B]];
+}
+
+- (IBAction)hermesSendWindowsKey:(id)sender {
+    [self hermesSendKeyCombo:@[@0x5B]];
+}
+
+- (IBAction)hermesSendAltTab:(id)sender {
+    [self hermesSendKeyCombo:@[@0xA4, @0x09]];
+}
+
+- (IBAction)hermesScaleFit:(id)sender {
+    [self hermesSetScaleMode:HermesScaleModeFit];
+}
+
+- (IBAction)hermesScaleFill:(id)sender {
+    [self hermesSetScaleMode:HermesScaleModeFill];
+}
+
+- (IBAction)hermesScaleStretch:(id)sender {
+    [self hermesSetScaleMode:HermesScaleModeStretch];
+}
+
+- (IBAction)hermesPointerDesktop:(id)sender {
+    [self hermesSetPointerMode:HermesPointerModeDesktop];
+    [self captureMouse];
+}
+
+- (IBAction)hermesPointerCaptured:(id)sender {
+    [self hermesSetPointerMode:HermesPointerModeCaptured];
+}
+
+- (BOOL)validateMenuItem:(NSMenuItem *)menuItem {
+    SEL action = menuItem.action;
+    if (action == @selector(hermesScaleFit:)) {
+        menuItem.state = [HermesSettings scaleMode] == HermesScaleModeFit ? NSControlStateValueOn : NSControlStateValueOff;
+    } else if (action == @selector(hermesScaleFill:)) {
+        menuItem.state = [HermesSettings scaleMode] == HermesScaleModeFill ? NSControlStateValueOn : NSControlStateValueOff;
+    } else if (action == @selector(hermesScaleStretch:)) {
+        menuItem.state = [HermesSettings scaleMode] == HermesScaleModeStretch ? NSControlStateValueOn : NSControlStateValueOff;
+    } else if (action == @selector(hermesPointerDesktop:)) {
+        menuItem.state = self.usesDesktopPointer ? NSControlStateValueOn : NSControlStateValueOff;
+    } else if (action == @selector(hermesPointerCaptured:)) {
+        menuItem.state = self.usesDesktopPointer ? NSControlStateValueOff : NSControlStateValueOn;
+    } else if (action == @selector(hermesToggleSessionPanel:)) {
+        menuItem.title = self.sessionPanel.isOpen ? @"Hide Session Controls" : @"Show Session Controls";
+    }
+    return YES;
+}
 
 #pragma mark - InputPresenceDelegate
 

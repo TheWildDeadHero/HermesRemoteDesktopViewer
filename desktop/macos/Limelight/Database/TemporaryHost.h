@@ -26,6 +26,10 @@
 @property (atomic, nullable, retain) NSString *mac;
 @property (atomic)                   int serverCodecModeSupport;
 
+// Apollo extensions (not persisted; refreshed from every serverinfo response)
+@property (atomic)                   BOOL vDisplaySupported;
+@property (atomic)                   BOOL vDisplayDriverReady;
+
 NS_ASSUME_NONNULL_BEGIN
 
 @property (atomic, retain) NSString *name;

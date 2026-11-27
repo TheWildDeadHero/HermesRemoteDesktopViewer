@@ -11,6 +11,9 @@
 
 @interface HIDSupport : NSObject
 @property (atomic) BOOL shouldSendInputEvents;
+// Hermes desktop pointer: the stream view sends absolute positions itself, so
+// relative mouse motion must not be sent from here.
+@property (atomic) BOOL absolutePointer;
 @property (atomic) TemporaryHost *host;
 
 - (instancetype)init:(TemporaryHost *)host;

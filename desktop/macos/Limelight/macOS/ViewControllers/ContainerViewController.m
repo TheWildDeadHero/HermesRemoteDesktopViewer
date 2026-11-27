@@ -9,6 +9,7 @@
 #import "ContainerViewController.h"
 #import "NSWindow+Moonlight.h"
 #import "Helpers.h"
+#import "Moonlight-Swift.h"
 
 @interface CustomSearchField : NSSearchField
 @end
@@ -47,7 +48,8 @@
     
     self.view.wantsLayer = YES;
     
-    NSViewController *hostsVC = [self.storyboard instantiateControllerWithIdentifier:@"hostsVC"];
+    // Hermes: a single SwiftUI list of computers replaces Moonlight's host and app grids
+    NSViewController *hostsVC = [[ComputerListViewController alloc] initWithNibName:nil bundle:nil];
     [self addChildViewController:hostsVC];
 
     [self.view addSubview:hostsVC.view];
@@ -67,12 +69,6 @@
     
     NSToolbar *toolbar = [Helpers getMainWindow].toolbar;
     toolbar.delegate = self;
-    
-    NSString *searchToolbarItemIdentifier = @"NewSearchToolbarItem";
-    
-    if (![toolbar.items.lastObject.itemIdentifier isEqualToString:searchToolbarItemIdentifier]) {
-        [toolbar insertItemWithItemIdentifier:searchToolbarItemIdentifier atIndex:toolbar.items.count];
-    }
 }
 
 - (void)viewDidAppear {
@@ -81,7 +77,7 @@
     NSWindow *window = self.view.window;
 
     window.frameAutosaveName = @"Main Window";
-    [window moonlight_centerWindowOnFirstRunWithSize:CGSizeMake(852, 566)];
+    [window moonlight_centerWindowOnFirstRunWithSize:CGSizeMake(820, 540)];
 
     [window setTitleVisibility:NSWindowTitleVisible];
 

@@ -202,7 +202,7 @@
             callback(host, nil);
         }
     } else if (!prohibitedAddress) {
-        callback(nil, @"Could not connect to host. Ensure GameStream is enabled in GeForce Experience on your PC.");
+        callback(nil, @"Could not connect to that computer. Make sure it is turned on, Apollo is running, and the address is right.");
     } else {
         callback(nil, prohibitedAddressMessage);
     }

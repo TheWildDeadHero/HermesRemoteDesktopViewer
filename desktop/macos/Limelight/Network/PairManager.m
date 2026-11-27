@@ -19,6 +19,15 @@
     HttpManager* _httpManager;
     NSData* _clientCert;
     id<PairCallback> _callback;
+    NSString* _otpPin;
+    NSString* _passphrase;
+}
+
+- (id) initWithManager:(HttpManager*)httpManager clientCert:(NSData*)clientCert otpPin:(NSString*)otpPin passphrase:(NSString*)passphrase callback:(id<PairCallback>)callback {
+    self = [self initWithManager:httpManager clientCert:clientCert callback:callback];
+    _otpPin = otpPin;
+    _passphrase = passphrase;
+    return self;
 }
 
 - (id) initWithManager:(HttpManager*)httpManager clientCert:(NSData*)clientCert callback:(id<PairCallback>)callback {
@@ -31,7 +40,7 @@
 
 - (void) main {
     // We have to call startPairing before calling any other _callback functions
-    NSString* PIN = [self generatePIN];
+    NSString* PIN = _otpPin.length > 0 ? _otpPin : [self generatePIN];
     [_callback startPairing:PIN];
     
     ServerInfoResponse* serverInfoResp = [[ServerInfoResponse alloc] init];
@@ -103,7 +112,7 @@
     Log(LOG_I, @"PIN: %@, saltedPIN: %@", PIN, salt);
     
     HttpResponse* pairResp = [[HttpResponse alloc] init];
-    [_httpManager executeRequestSynchronously:[HttpRequest requestForResponse:pairResp withUrlRequest:[_httpManager newPairRequest:salt clientCert:_clientCert]]];
+    [_httpManager executeRequestSynchronously:[HttpRequest requestForResponse:pairResp withUrlRequest:[_httpManager newPairRequest:salt clientCert:_clientCert otpPin:_otpPin passphrase:_passphrase]]];
     if (![self verifyResponseStatus:pairResp]) {
         [self finishPairing:bgId forResponse:pairResp withFallbackError:@"Pairing was declined by the target."];
         return;

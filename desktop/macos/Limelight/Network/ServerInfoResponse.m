@@ -51,6 +51,11 @@
         host.pairState = PairStateUnknown;
     }
     
+    // Apollo advertises whether it can create a virtual display for the client
+    host.vDisplaySupported = [[[self getStringTag:@"VirtualDisplayCapable"] trim] isEqualToString:@"true"];
+    host.vDisplayDriverReady = host.vDisplaySupported &&
+        [[[self getStringTag:@"VirtualDisplayDriverReady"] trim] isEqualToString:@"true"];
+
     NSString *serverCodecModeString = [self getStringTag:@"ServerCodecModeSupport"];
     if (serverCodecModeString != nil) {
         host.serverCodecModeSupport = [[serverCodecModeString trim] intValue];

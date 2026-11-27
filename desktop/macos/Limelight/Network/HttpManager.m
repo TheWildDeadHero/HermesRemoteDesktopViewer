@@ -13,6 +13,7 @@
 
 #include <libxml2/libxml/xmlreader.h>
 #include <string.h>
+#include <CommonCrypto/CommonDigest.h>
 
 #include <Limelight.h>
 
@@ -33,6 +34,18 @@
     dispatch_semaphore_t _requestLock;
     
     NSError* _error;
+    NSInteger _lastHttpStatus;
+}
+
+// The name Apollo shows for this client after pairing: this Mac's name.
+static NSString* hermesDeviceName(void) {
+    NSString* name = [[NSHost currentHost] localizedName];
+    if (name.length == 0) {
+        name = @"Hermes Mac";
+    }
+    NSMutableCharacterSet* allowed = [[NSCharacterSet alphanumericCharacterSet] mutableCopy];
+    [allowed addCharactersInString:@"-._~"];
+    return [name stringByAddingPercentEncodingWithAllowedCharacters:allowed] ?: @"Hermes";
 }
 
 static const NSString* HTTP_PORT = @"47989";
@@ -54,7 +67,7 @@ static const NSString* HTTPS_PORT = @"47984";
     // Use the same UID for all Moonlight clients to allow them
     // quit games started on another Moonlight client.
     _uniqueId = @"0123456789ABCDEF";
-    _deviceName = deviceName;
+    _deviceName = hermesDeviceName();
     _serverCert = serverCert;
     _requestLock = dispatch_semaphore_create(0);
     _respData = [[NSMutableData alloc] init];
@@ -87,6 +100,9 @@ static const NSString* HTTPS_PORT = @"47984";
         assert(weakSelf != nil);
         typeof(self) strongSelf = weakSelf;
         
+        if ([response isKindOfClass:[NSHTTPURLResponse class]]) {
+            strongSelf->_lastHttpStatus = ((NSHTTPURLResponse*)response).statusCode;
+        }
         if (error != NULL) {
             Log(LOG_D, @"Connection error: %@", error);
             strongSelf->_error = error;
@@ -153,10 +169,53 @@ static const NSString* HTTPS_PORT = @"47984";
 }
 
 - (NSURLRequest*) newPairRequest:(NSData*)salt clientCert:(NSData*)clientCert {
+    return [self newPairRequest:salt clientCert:clientCert otpPin:nil passphrase:nil];
+}
+
+- (NSURLRequest*) newPairRequest:(NSData*)salt clientCert:(NSData*)clientCert otpPin:(NSString*)otpPin passphrase:(NSString*)passphrase {
+    // Callers pass the salted PIN (16 random bytes followed by the PIN); only the
+    // 16-byte salt goes on the wire, matching Moonlight PC/Android and Sunshine.
+    NSData* saltBytes = salt.length > 16 ? [salt subdataWithRange:NSMakeRange(0, 16)] : salt;
+    NSString* saltHex = [self bytesToHex:saltBytes];
     NSString* urlString = [NSString stringWithFormat:@"%@/pair?uniqueid=%@&devicename=%@&updateState=1&phrase=getservercert&salt=%@&clientcert=%@",
-                           _baseHTTPURL, _uniqueId, _deviceName, [self bytesToHex:salt], [self bytesToHex:clientCert]];
+                           _baseHTTPURL, _uniqueId, _deviceName, saltHex, [self bytesToHex:clientCert]];
+    if (otpPin.length > 0 && passphrase.length > 0) {
+        // Same scheme as Artemis: uppercase hex SHA-256 of PIN + salt hex + passphrase
+        NSData* plain = [[NSString stringWithFormat:@"%@%@%@", otpPin, saltHex, passphrase] dataUsingEncoding:NSUTF8StringEncoding];
+        unsigned char digest[CC_SHA256_DIGEST_LENGTH];
+        CC_SHA256(plain.bytes, (CC_LONG)plain.length, digest);
+        urlString = [urlString stringByAppendingFormat:@"&otpauth=%@",
+                     [self bytesToHex:[NSData dataWithBytes:digest length:sizeof(digest)]]];
+    }
     // This call blocks while waiting for the user to input the PIN on the PC
     return [self createRequestFromString:urlString timeout:EXTRA_LONG_TIMEOUT_SEC];
+}
+
+- (NSURLRequest*) newGetClipboardRequest {
+    NSString* urlString = [NSString stringWithFormat:@"%@/actions/clipboard?uniqueid=%@&type=text", _baseHTTPSURL, _uniqueId];
+    return [self createRequestFromString:urlString timeout:NORMAL_TIMEOUT_SEC];
+}
+
+- (NSURLRequest*) newSendClipboardRequest:(NSString*)text {
+    NSString* urlString = [NSString stringWithFormat:@"%@/actions/clipboard?uniqueid=%@&type=text", _baseHTTPSURL, _uniqueId];
+    NSMutableURLRequest* request = [[self createRequestFromString:urlString timeout:NORMAL_TIMEOUT_SEC] mutableCopy];
+    request.HTTPMethod = @"POST";
+    [request setValue:@"text/plain; charset=utf-8" forHTTPHeaderField:@"Content-Type"];
+    request.HTTPBody = [text dataUsingEncoding:NSUTF8StringEncoding];
+    return request;
+}
+
+- (NSData*) executeRawRequestSynchronously:(NSURLRequest*)urlRequest statusCode:(NSInteger*)statusCode {
+    _lastHttpStatus = 0;
+    HttpRequest* request = [HttpRequest requestWithUrlRequest:urlRequest];
+    [self executeRequestSynchronously:request];
+    if (statusCode != NULL) {
+        *statusCode = _error ? [_error code] : _lastHttpStatus;
+    }
+    if (_error) {
+        return nil;
+    }
+    return [_respData copy];
 }
 
 - (NSURLRequest*) newUnpairRequest {
@@ -229,6 +288,9 @@ static const NSString* HTTPS_PORT = @"47984";
                            config.enableHdr ? @"&hdrMode=1&clientHdrCapVersion=0&clientHdrCapSupportedFlagsInUint32=0&clientHdrCapMetaDataId=NV_STATIC_METADATA_TYPE_1&clientHdrCapDisplayData=0x0x0x0x0x0x0x0x0x0x0": @"",
                            config.playAudioOnPC ? 1 : 0,
                            SURROUNDAUDIOINFO_FROM_AUDIO_CONFIGURATION(config.audioConfiguration)];
+    // Apollo: virtual display + display scaling (ignored by other hosts)
+    urlString = [urlString stringByAppendingFormat:@"&virtualDisplay=%d&scaleFactor=%d",
+                 config.useVirtualDisplay ? 1 : 0, config.scaleFactor > 0 ? config.scaleFactor : 100];
     Log(LOG_I, @"Requesting: %@", urlString);
     // This blocks while the app is launching
     return [self createRequestFromString:urlString timeout:LONG_TIMEOUT_SEC];
@@ -253,6 +315,9 @@ static const NSString* HTTPS_PORT = @"47984";
                            config.enableHdr ? @"&hdrMode=1&clientHdrCapVersion=0&clientHdrCapSupportedFlagsInUint32=0&clientHdrCapMetaDataId=NV_STATIC_METADATA_TYPE_1&clientHdrCapDisplayData=0x0x0x0x0x0x0x0x0x0x0": @"",
                            config.playAudioOnPC ? 1 : 0,
                            SURROUNDAUDIOINFO_FROM_AUDIO_CONFIGURATION(config.audioConfiguration)];
+    // Apollo: virtual display + display scaling (ignored by other hosts)
+    urlString = [urlString stringByAppendingFormat:@"&virtualDisplay=%d&scaleFactor=%d",
+                 config.useVirtualDisplay ? 1 : 0, config.scaleFactor > 0 ? config.scaleFactor : 100];
     Log(LOG_I, @"Requesting: %@", urlString);
     // This blocks while the app is resuming
     return [self createRequestFromString:urlString timeout:LONG_TIMEOUT_SEC];

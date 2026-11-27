@@ -10,6 +10,8 @@
 
 @interface StreamViewMac ()
 @property (nonatomic, strong) NSProgressIndicator *spinner;
+@property (nonatomic, strong) NSMutableArray<NSView *> *overlayViews;
+@property (nonatomic) BOOL reorderingOverlays;
 
 @end
 
@@ -38,6 +40,53 @@
         self.window.title = self.appName;
     } else {
         self.window.title = [[self.appName stringByAppendingString:@" - "] stringByAppendingString:statusText];
+    }
+}
+
+- (void)addOverlayView:(NSView *)view {
+    if (self.overlayViews == nil) {
+        self.overlayViews = [NSMutableArray array];
+    }
+    self.wantsLayer = YES;
+    [self.overlayViews addObject:view];
+    [self addSubview:view positioned:NSWindowAbove relativeTo:nil];
+}
+
+- (void)didAddSubview:(NSView *)subview {
+    [super didAddSubview:subview];
+    // The renderer adds (and re-creates) its video layer view at any time; keep overlays on top.
+    if (self.reorderingOverlays || self.overlayViews.count == 0 || [self.overlayViews containsObject:subview]) {
+        return;
+    }
+    self.reorderingOverlays = YES;
+    for (NSView *overlay in self.overlayViews) {
+        [self addSubview:overlay positioned:NSWindowAbove relativeTo:nil];
+    }
+    self.reorderingOverlays = NO;
+}
+
+- (void)setHidesCursor:(BOOL)hidesCursor {
+    if (_hidesCursor == hidesCursor) {
+        return;
+    }
+    _hidesCursor = hidesCursor;
+    [self.window invalidateCursorRectsForView:self];
+}
+
++ (NSCursor *)blankCursor {
+    static NSCursor *cursor;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        NSImage *image = [[NSImage alloc] initWithSize:NSMakeSize(1, 1)];
+        cursor = [[NSCursor alloc] initWithImage:image hotSpot:NSZeroPoint];
+    });
+    return cursor;
+}
+
+- (void)resetCursorRects {
+    [super resetCursorRects];
+    if (self.hidesCursor) {
+        [self addCursorRect:self.bounds cursor:[StreamViewMac blankCursor]];
     }
 }
 

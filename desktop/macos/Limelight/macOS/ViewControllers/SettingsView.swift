@@ -9,14 +9,20 @@
 import SwiftUI
 
 enum SettingsPaneType: Int, CaseIterable {
+    case remoteDesktop = 100
     case stream
     case videoAndAudio
     case input
     case app
     case legacy
 
+    /// Panes Hermes shows. (Moonlight's app-grid and GeForce Experience panes don't apply.)
+    static var visible: [SettingsPaneType] { [.remoteDesktop, .stream, .videoAndAudio, .input] }
+
     var title: String {
         switch self {
+        case .remoteDesktop:
+            return "Remote Desktop"
         case .stream:
             return "Stream"
         case .videoAndAudio:
@@ -33,6 +39,8 @@ enum SettingsPaneType: Int, CaseIterable {
     
     var symbol: String {
         switch self {
+        case .remoteDesktop:
+            return "display"
         case .stream:
             return "airplayvideo"
         case .videoAndAudio:
@@ -48,6 +56,8 @@ enum SettingsPaneType: Int, CaseIterable {
     
     var color: Color {
         switch self {
+        case .remoteDesktop:
+            return .indigo
         case .stream:
             return .blue
         case .videoAndAudio:
@@ -78,7 +88,7 @@ extension Color {
 struct SettingsView: View {
     @StateObject var settingsModel = SettingsModel()
     
-    @AppStorage("selected-settings-pane") private var selectedPane: SettingsPaneType = .stream
+    @AppStorage("selected-settings-pane") private var selectedPane: SettingsPaneType = .remoteDesktop
 
     var body: some View {
         NavigationView {
@@ -103,7 +113,7 @@ struct Sidebar: View {
             }
         })
 
-        List(SettingsPaneType.allCases, id: \.self, selection: selectionBinding) { pane in
+        List(SettingsPaneType.visible, id: \.self, selection: selectionBinding) { pane in
             PaneCellView(pane: pane)
         }
         .listStyle(.sidebar)
@@ -119,6 +129,10 @@ struct Detail: View {
     var body: some View {
         Group {
             switch pane {
+            case .remoteDesktop:
+                SettingPaneLoader(settingsModel) {
+                    RemoteDesktopSettingsView()
+                }
             case .stream:
                 SettingPaneLoader(settingsModel) {
                     StreamView()
@@ -293,6 +307,70 @@ struct StreamView: View {
                     }
                 }
             }
+        }
+    }
+}
+
+struct RemoteDesktopSettingsView: View {
+    @AppStorage(HermesSettings.matchDisplayKey) private var matchDisplay = true
+    @AppStorage(HermesSettings.virtualDisplayKey) private var virtualDisplay = true
+    @AppStorage(HermesSettings.hostScalingKey) private var hostScaling = 0
+    @AppStorage(HermesSettings.pointerModeKey) private var pointerMode = HermesPointerMode.desktop.rawValue
+    @AppStorage(HermesSettings.scaleModeKey) private var scaleMode = HermesScaleMode.fit.rawValue
+    @AppStorage(HermesSettings.showSessionHandleKey) private var showHandle = true
+
+    var body: some View {
+        ScrollView {
+            VStack {
+                FormSection(title: "Display") {
+                    ToggleCell(title: "Match this Mac's display resolution", boolBinding: $matchDisplay)
+                    Divider()
+                    ToggleCell(title: "Use Apollo's virtual display", boolBinding: $virtualDisplay)
+                    Divider()
+                    FormCell(title: "Remote display scaling", contentWidth: 150, content: {
+                        Picker("", selection: $hostScaling) {
+                            ForEach(HermesSettings.hostScalingChoices, id: \.self) { choice in
+                                Text(choice == 0 ? "Match this Mac" : "\(choice)%")
+                            }
+                        }
+                    })
+                    Divider()
+                    FormCell(title: "Picture", contentWidth: 150, content: {
+                        Picker("", selection: $scaleMode) {
+                            Text("Fit").tag(HermesScaleMode.fit.rawValue)
+                            Text("Fill").tag(HermesScaleMode.fill.rawValue)
+                            Text("Stretch").tag(HermesScaleMode.stretch.rawValue)
+                        }
+                    })
+                }
+
+                Text("With matching on, Hermes streams at your Mac's own resolution and Apollo creates a virtual display of exactly that size, so the remote desktop is sharp and fills the screen. Turn it off to use the resolution chosen under Stream.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 4)
+
+                Spacer()
+                    .frame(height: 24)
+
+                FormSection(title: "Input") {
+                    FormCell(title: "Pointer", contentWidth: 150, content: {
+                        Picker("", selection: $pointerMode) {
+                            Text("Desktop").tag(HermesPointerMode.desktop.rawValue)
+                            Text("Captured (games)").tag(HermesPointerMode.captured.rawValue)
+                        }
+                    })
+                    Divider()
+                    ToggleCell(title: "Show the session controls tab", boolBinding: $showHandle)
+                }
+
+                Text("Desktop pointer moves freely and clicks exactly where you point. Captured locks the pointer to the stream for games; press Control-Option to release it. Session controls are always available with ⌃⌥⌘S.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 4)
+            }
+            .padding()
         }
     }
 }

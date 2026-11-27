@@ -565,7 +565,7 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
     if (deltaX != 0 || deltaY != 0) {
         me.mouseDeltaX = 0;
         me.mouseDeltaY = 0;
-        if (me.shouldSendInputEvents) {
+        if (me.shouldSendInputEvents && !me.absolutePointer) {
             LiSendMouseMoveEvent(deltaX, deltaY);
         }
     }
@@ -692,7 +692,7 @@ static CVReturn displayLinkOutputCallback(CVDisplayLinkRef displayLink,
     }
     
     if (event.deltaX != 0 || event.deltaY != 0) {
-        if (self.shouldSendInputEvents) {
+        if (self.shouldSendInputEvents && !self.absolutePointer) {
             LiSendMouseMoveEvent(event.deltaX, event.deltaY);
         }
     }

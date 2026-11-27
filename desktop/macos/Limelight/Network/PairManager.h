@@ -19,4 +19,6 @@
 
 @interface PairManager : NSOperation
 - (id) initWithManager:(HttpManager*)httpManager clientCert:(NSData*)clientCert callback:(id<PairCallback>)callback;
+// Apollo OTP pairing: uses the PIN + passphrase generated in Apollo's web UI instead of showing a PIN
+- (id) initWithManager:(HttpManager*)httpManager clientCert:(NSData*)clientCert otpPin:(NSString*)otpPin passphrase:(NSString*)passphrase callback:(id<PairCallback>)callback;
 @end

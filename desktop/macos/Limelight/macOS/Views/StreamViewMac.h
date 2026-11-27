@@ -14,4 +14,10 @@
 @property (nonatomic, strong) NSString *appName;
 @property (nonatomic, weak) id<KeyboardNotifiableDelegate> keyboardNotifiable;
 
+// Hermes: hide the Mac's cursor over the stream (the host draws its own pointer in the video)
+@property (nonatomic) BOOL hidesCursor;
+
+// Hermes: views that must stay above the video layer (session panel and its handle)
+- (void)addOverlayView:(NSView *)view;
+
 @end

@@ -29,4 +29,9 @@
 @property BOOL allowHevc;
 @property NSData* serverCert;
 
+// Apollo: ask the host for a virtual display sized to this stream, and the
+// display scale (percent) to apply to it.
+@property BOOL useVirtualDisplay;
+@property int scaleFactor;
+
 @end

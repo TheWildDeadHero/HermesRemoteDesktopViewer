@@ -7,6 +7,7 @@
 //
 
 #import "VideoDecoderRenderer.h"
+#import "Moonlight-Swift.h"
 #import "RendererLayerContainer.h"
 
 #include "Limelight.h"
@@ -32,6 +33,7 @@
     CMVideoFormatDescriptionRef formatDesc;
 
     CVDisplayLinkRef _displayLink;
+    id _scaleModeObserver;
 }
 
 - (void)reinitializeDisplayLayer
@@ -44,6 +46,7 @@
     
     displayLayer = (AVSampleBufferDisplayLayer *)layerContainer.layer;
     displayLayer.backgroundColor = [OSColor blackColor].CGColor;
+    displayLayer.videoGravity = [HermesSettings videoGravity];
     
     // We need some parameter sets before we can properly start decoding frames
     waitingForSps = true;
@@ -72,6 +75,15 @@ static CGDirectDisplayID getDisplayID(NSScreen* screen)
     _view = view;
     
     [self reinitializeDisplayLayer];
+
+    // Hermes: switch Fit / Fill / Stretch live from the session panel
+    __weak typeof(self) weakSelf = self;
+    _scaleModeObserver = [[NSNotificationCenter defaultCenter] addObserverForName:[HermesSettings scaleModeDidChangeNotification] object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
+        typeof(self) strongSelf = weakSelf;
+        if (strongSelf != nil) {
+            strongSelf->displayLayer.videoGravity = [HermesSettings videoGravity];
+        }
+    }];
         
     return self;
 }
@@ -150,6 +162,9 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink,
 
 - (void)dealloc
 {
+    if (_scaleModeObserver != nil) {
+        [[NSNotificationCenter defaultCenter] removeObserver:_scaleModeObserver];
+    }
     [self stop];
 }
 
