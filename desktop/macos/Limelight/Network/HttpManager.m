@@ -288,7 +288,7 @@ static const NSString* HTTPS_PORT = @"47984";
                            config.enableHdr ? @"&hdrMode=1&clientHdrCapVersion=0&clientHdrCapSupportedFlagsInUint32=0&clientHdrCapMetaDataId=NV_STATIC_METADATA_TYPE_1&clientHdrCapDisplayData=0x0x0x0x0x0x0x0x0x0x0": @"",
                            config.playAudioOnPC ? 1 : 0,
                            SURROUNDAUDIOINFO_FROM_AUDIO_CONFIGURATION(config.audioConfiguration)];
-    // Apollo: virtual display + display scaling (ignored by other hosts)
+    // Apollo: virtual display + render scale (ignored by other hosts)
     urlString = [urlString stringByAppendingFormat:@"&virtualDisplay=%d&scaleFactor=%d",
                  config.useVirtualDisplay ? 1 : 0, config.scaleFactor > 0 ? config.scaleFactor : 100];
     Log(LOG_I, @"Requesting: %@", urlString);
@@ -315,7 +315,7 @@ static const NSString* HTTPS_PORT = @"47984";
                            config.enableHdr ? @"&hdrMode=1&clientHdrCapVersion=0&clientHdrCapSupportedFlagsInUint32=0&clientHdrCapMetaDataId=NV_STATIC_METADATA_TYPE_1&clientHdrCapDisplayData=0x0x0x0x0x0x0x0x0x0x0": @"",
                            config.playAudioOnPC ? 1 : 0,
                            SURROUNDAUDIOINFO_FROM_AUDIO_CONFIGURATION(config.audioConfiguration)];
-    // Apollo: virtual display + display scaling (ignored by other hosts)
+    // Apollo: virtual display + render scale (ignored by other hosts)
     urlString = [urlString stringByAppendingFormat:@"&virtualDisplay=%d&scaleFactor=%d",
                  config.useVirtualDisplay ? 1 : 0, config.scaleFactor > 0 ? config.scaleFactor : 100];
     Log(LOG_I, @"Requesting: %@", urlString);

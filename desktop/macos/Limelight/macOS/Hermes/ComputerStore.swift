@@ -371,6 +371,7 @@ final class ComputerStore: ObservableObject {
                                            self.directory.start()
                                            self.refresh()
                                            if success {
+                                               self.showBanner("Paired with \(computer.name). If the mouse or keyboard don't respond, allow input for this Mac under Clients in Apollo's web UI.")
                                                self.connect(Computer(id: computer.id, name: computer.name,
                                                                      address: computer.address, status: .online,
                                                                      canWake: computer.canWake,

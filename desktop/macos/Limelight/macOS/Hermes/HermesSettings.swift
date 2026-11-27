@@ -30,16 +30,12 @@ import AVFoundation
 final class HermesSettings: NSObject {
     static let matchDisplayKey = "hermes.matchDisplay"
     static let virtualDisplayKey = "hermes.virtualDisplay"
-    static let hostScalingKey = "hermes.hostScaling"
     static let pointerModeKey = "hermes.pointerMode"
     static let scaleModeKey = "hermes.scaleMode"
     static let showSessionHandleKey = "hermes.showSessionHandle"
 
     /// Posted (on the main thread) when the picture scale mode changes mid-stream.
     @objc static let scaleModeDidChangeNotification = Notification.Name("HermesScaleModeDidChange")
-
-    /// 0 means "match this Mac" (use the display's backing scale); otherwise a percentage.
-    static let hostScalingChoices: [Int] = [0, 100, 125, 150, 175, 200, 250, 300]
 
     private static var defaults: UserDefaults { .standard }
 
@@ -62,11 +58,6 @@ final class HermesSettings: NSObject {
     @objc static var showSessionHandle: Bool {
         get { bool(showSessionHandleKey, default: true) }
         set { defaults.set(newValue, forKey: showSessionHandleKey) }
-    }
-
-    @objc static var hostScaling: Int {
-        get { defaults.object(forKey: hostScalingKey) == nil ? 0 : defaults.integer(forKey: hostScalingKey) }
-        set { defaults.set(newValue, forKey: hostScalingKey) }
     }
 
     @objc static var pointerMode: HermesPointerMode {
@@ -94,16 +85,6 @@ final class HermesSettings: NSObject {
     /// The screen a new stream will most likely appear on.
     @objc(preferredScreen) static func preferredScreen() -> NSScreen? {
         NSApp.keyWindow?.screen ?? NSApp.mainWindow?.screen ?? NSScreen.main
-    }
-
-    /// Display scale percent to request from Apollo for its virtual display.
-    @objc(hostScaleFactorForScreen:) static func hostScaleFactor(for screen: NSScreen?) -> Int32 {
-        let choice = hostScaling
-        if choice > 0 {
-            return Int32(choice)
-        }
-        let backing = screen?.backingScaleFactor ?? 2
-        return Int32((backing * 100).rounded())
     }
 
     /// Pixel size of `screen`, minus the camera housing on notched MacBooks, clamped to what

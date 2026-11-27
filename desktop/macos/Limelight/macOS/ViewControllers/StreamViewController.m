@@ -31,7 +31,7 @@
 #import <IOKit/pwr_mgt/IOPMLib.h>
 #import <Carbon/Carbon.h>
 
-@interface StreamViewController () <ConnectionCallbacks, KeyboardNotifiableDelegate, InputPresenceDelegate, HermesSessionActions>
+@interface StreamViewController () <ConnectionCallbacks, KeyboardNotifiableDelegate, InputPresenceDelegate, HermesSessionActions, NSMenuItemValidation>
 
 @property (nonatomic, strong) ControllerSupport *controllerSupport;
 @property (nonatomic, strong) HIDSupport *hidSupport;
@@ -606,9 +606,10 @@
     
     streamConfig.audioConfiguration = AUDIO_CONFIGURATION_STEREO;
 
-    // Apollo: give the stream its own virtual display at this size, scaled like this Mac
+    // Apollo: give the stream its own virtual display at exactly this size. (Apollo's
+    // scaleFactor multiplies the render resolution, so 100 keeps it pixel-for-pixel.)
     streamConfig.useVirtualDisplay = [HermesSettings useVirtualDisplay] && self.app.host.vDisplaySupported && self.app.host.vDisplayDriverReady;
-    streamConfig.scaleFactor = [HermesSettings hostScaleFactorForScreen:[HermesSettings preferredScreen]];
+    streamConfig.scaleFactor = 100;
     self.streamFps = streamConfig.frameRate;
 
     if (self.useSystemControllerDriver) {

@@ -314,7 +314,6 @@ struct StreamView: View {
 struct RemoteDesktopSettingsView: View {
     @AppStorage(HermesSettings.matchDisplayKey) private var matchDisplay = true
     @AppStorage(HermesSettings.virtualDisplayKey) private var virtualDisplay = true
-    @AppStorage(HermesSettings.hostScalingKey) private var hostScaling = 0
     @AppStorage(HermesSettings.pointerModeKey) private var pointerMode = HermesPointerMode.desktop.rawValue
     @AppStorage(HermesSettings.scaleModeKey) private var scaleMode = HermesScaleMode.fit.rawValue
     @AppStorage(HermesSettings.showSessionHandleKey) private var showHandle = true
@@ -327,14 +326,6 @@ struct RemoteDesktopSettingsView: View {
                     Divider()
                     ToggleCell(title: "Use Apollo's virtual display", boolBinding: $virtualDisplay)
                     Divider()
-                    FormCell(title: "Remote display scaling", contentWidth: 150, content: {
-                        Picker("", selection: $hostScaling) {
-                            ForEach(HermesSettings.hostScalingChoices, id: \.self) { choice in
-                                Text(choice == 0 ? "Match this Mac" : "\(choice)%")
-                            }
-                        }
-                    })
-                    Divider()
                     FormCell(title: "Picture", contentWidth: 150, content: {
                         Picker("", selection: $scaleMode) {
                             Text("Fit").tag(HermesScaleMode.fit.rawValue)
@@ -344,7 +335,7 @@ struct RemoteDesktopSettingsView: View {
                     })
                 }
 
-                Text("With matching on, Hermes streams at your Mac's own resolution and Apollo creates a virtual display of exactly that size, so the remote desktop is sharp and fills the screen. Turn it off to use the resolution chosen under Stream.")
+                Text("With matching on, Hermes streams at your Mac's own resolution and Apollo creates a virtual display of exactly that size, so the remote desktop is sharp and fills the screen. Set text size once in Windows' Display settings; Windows remembers it for Hermes' virtual display. Turn matching off to use the resolution chosen under Stream.")
                     .font(.caption)
                     .foregroundColor(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
