@@ -1,3 +1,6 @@
 [submodule "app/src/main/jni/moonlight-core/moonlight-common-c"]
 	path = app/src/main/jni/moonlight-core/moonlight-common-c
 	url = https://github.com/ClassicOldSong/moonlight-common-c
+[submodule "desktop/macos/moonlight-common/moonlight-common-c"]
+	path = desktop/macos/moonlight-common/moonlight-common-c
+	url = https://github.com/MichaelMKenny/moonlight-common-c.git

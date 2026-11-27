@@ -3,7 +3,13 @@ name: Build APK
 on:
   push:
     branches: [ main ]
+    paths-ignore:
+      - 'desktop/**'
+      - '.github/workflows/macos.yml'
   pull_request:
+    paths-ignore:
+      - 'desktop/**'
+      - '.github/workflows/macos.yml'
   workflow_dispatch:
 
 concurrency:

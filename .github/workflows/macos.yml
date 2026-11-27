@@ -1,0 +1,129 @@
+name: Build macOS app
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'desktop/macos/**'
+      - '.github/workflows/macos.yml'
+  pull_request:
+    paths:
+      - 'desktop/macos/**'
+      - '.github/workflows/macos.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: macos-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+env:
+  # Prebuilt universal (arm64 + x86_64) FFmpeg, Opus and SDL2, as used by upstream moonlight-macos
+  DEPS_URL: https://github.com/coofdy/moonlight-mobile-deps/releases/download/latest/moonlight-apple-xcframeworks.zip
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: desktop/macos
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - name: Show toolchain
+        run: |
+          xcodebuild -version
+          sw_vers
+
+      - name: Download xcframework dependencies
+        run: |
+          curl -fsSL -o /tmp/deps.zip "$DEPS_URL"
+          unzip -qo /tmp/deps.zip -d xcframeworks
+          ls xcframeworks
+
+      - name: Build universal app (arm64 + x86_64)
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project Moonlight.xcodeproj \
+            -scheme "Moonlight for macOS" \
+            -configuration Release \
+            -derivedDataPath build \
+            -destination 'generic/platform=macOS' \
+            ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO \
+            CODE_SIGN_IDENTITY="-" CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM="" \
+            BUILD_NUMBER="${{ github.run_number }}" \
+            build 2>&1 | tee build.log | xcbeautify --renderer github-actions
+
+      - name: Surface compiler errors
+        if: failure()
+        run: |
+          grep -E "error:|fatal error|Undefined symbols|ld: " build.log | sort -u | head -80 | while IFS= read -r l; do echo "::error::$l"; done || true
+
+      - name: Verify universal binary
+        run: |
+          APP="build/Build/Products/Release/Hermes.app"
+          BIN="$APP/Contents/MacOS/Hermes"
+          lipo -info "$BIN"
+          lipo "$BIN" -verify_arch arm64 x86_64
+          echo "APP=$APP" >> "$GITHUB_ENV"
+
+      - name: Ad-hoc sign
+        run: |
+          codesign --force --deep --sign - --entitlements Moonlight.entitlements "$APP"
+          codesign --verify --deep --strict --verbose=2 "$APP"
+
+      - name: Smoke test (launch for 15 s, must not crash)
+        run: |
+          "$APP/Contents/MacOS/Hermes" > launch.log 2>&1 &
+          PID=$!
+          sleep 15
+          if kill -0 $PID 2>/dev/null; then
+            echo "Hermes is still running after 15 s"
+            kill $PID || true
+          else
+            wait $PID; CODE=$?
+            echo "::error::Hermes exited early with code $CODE"
+            tail -50 launch.log
+            ls ~/Library/Logs/DiagnosticReports/ 2>/dev/null | grep -i hermes && \
+              cat ~/Library/Logs/DiagnosticReports/Hermes* | head -80
+            exit 1
+          fi
+          tail -20 launch.log || true
+
+      - name: Package DMG
+        run: |
+          mkdir -p dmg
+          cp -R "$APP" dmg/
+          ln -s /Applications dmg/Applications
+          hdiutil create -volname "Hermes" -srcfolder dmg -ov -format UDZO Hermes-macOS-universal.dmg
+          (cd build/Build/Products/Release && ditto -c -k --keepParent Hermes.app ../../../../Hermes-macOS-universal.zip)
+          ls -la *.dmg *.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hermes-macos
+          path: |
+            desktop/macos/Hermes-macOS-universal.dmg
+            desktop/macos/Hermes-macOS-universal.zip
+          if-no-files-found: error
+
+      - name: Publish rolling "latest-macos" release
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest-macos
+          name: Latest macOS build
+          prerelease: true
+          make_latest: false
+          body: |
+            Automatic universal (Apple Silicon + Intel) build of ${{ github.sha }}.
+            Unsigned: the first time, right-click Hermes.app → Open, or allow it in System Settings → Privacy & Security.
+          files: |
+            desktop/macos/Hermes-macOS-universal.dmg
+            desktop/macos/Hermes-macOS-universal.zip
